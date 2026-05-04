@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TasteEngine — Evaluation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">Taste<span>Engine</span></a>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/recommend">Recommend</a>
+            <a href="/evaluate" class="active">Evaluate</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="glass">
+            <h2 class="glass-header">📊 Evaluation & Comparison Dashboard</h2>
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Comprehensive analysis of all recommendation methods and approaches using 6 evaluation metrics.</p>
+            <div class="mt-2">
+                <button class="btn btn-primary" onclick="runEvaluation()">▶️ Run Evaluation</button>
+            </div>
+        </div>
+
+        <div id="evalLoading" class="loading hidden">
+            <div class="spinner"></div>
+            <span>Running evaluation...</span>
+        </div>
+
+        <div id="evalResults" class="hidden">
+
+            <div class="glass">
+                <h2 class="glass-header">🤝 Collaborative Filtering — Method Comparison</h2>
+                <div style="overflow-x: auto;">
+                    <table class="eval-table" id="cfTable">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>RMSE ↓</th>
+                                <th>MAE ↓</th>
+                                <th>Precision@5 ↑</th>
+                                <th>Recall@5 ↑</th>
+                                <th>F1@5 ↑</th>
+                                <th>Coverage ↑</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cfTableBody">
+                            <tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);">Click "Run Evaluation" to see results</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="bestCfBadge" class="mt-2 hidden">
+                    <span class="badge-best">🏆 Best CF Method: <span id="bestCfName"></span></span>
+                </div>
+
+                <div class="mt-2 chart-container">
+                    <canvas id="cfChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass">
+                <h2 class="glass-header">📈 Approach Comparison (CF vs Content-Based vs Knowledge-Based)</h2>
+                <div style="overflow-x: auto;">
+                    <table class="eval-table" id="approachTable">
+                        <thead>
+                            <tr>
+                                <th>Approach</th>
+                                <th>Precision@5 ↑</th>
+                                <th>Recall@5 ↑</th>
+                            </tr>
+                        </thead>
+                        <tbody id="approachTableBody">
+                            <tr><td colspan="3" style="text-align:center;color:rgba(255,255,255,0.4);">Click "Run Evaluation" to see results</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass" id="analysisSection" class="hidden">
+                <h2 class="glass-header">🔍 Analysis & Insights</h2>
+
+                <div class="analysis-block">
+                    <h4>Which method performs best?</h4>
+                    <p id="analysisBestMethod">Run evaluation to find out.</p>
+                </div>
+
+                <div class="analysis-block mt-2">
+                    <h4>Which approach performs best?</h4>
+                    <p id="analysisBestApproach">Run evaluation to find out.</p>
+                </div>
+
+                <div class="analysis-block mt-2">
+                    <h4>Under what conditions does each perform better?</h4>
+                    <p id="analysisConditions">Run evaluation to find out.</p>
+                </div>
+
+                <div class="analysis-block mt-2">
+                    <h4>Why do differences occur?</h4>
+                    <p id="analysisWhy">Run evaluation to find out.</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let cfChartInstance = null;
+
+        function runEvaluation() {
+            document.getElementById('evalLoading').classList.remove('hidden');
+            document.getElementById('evalResults').classList.add('hidden');
+
+            fetch('/api/evaluate')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('evalLoading').classList.add('hidden');
+                document.getElementById('evalResults').classList.remove('hidden');
+
+                if (data.error) {
+                    document.getElementById('cfTableBody').innerHTML =
+                        `<tr><td colspan="7" style="text-align:center;color:#FF6584;">Error: ${data.error}</td></tr>`;
+                    return;
+                }
+
+                renderCfTable(data);
+                renderCfChart(data);
+                renderApproachTable(data);
+                renderAnalysis(data);
+            })
+            .catch(err => {
+                document.getElementById('evalLoading').classList.add('hidden');
+                document.getElementById('evalResults').classList.remove('hidden');
+                document.getElementById('cfTableBody').innerHTML =
+                    `<tr><td colspan="7" style="text-align:center;color:#FF6584;">Error: ${err.message}</td></tr>`;
+            });
+        }
+
+        function renderCfTable(data) {
+            const tbody = document.getElementById('cfTableBody');
+            tbody.innerHTML = '';
+
+            if (!data.cf_methods || data.cf_methods.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);">No CF methods evaluated</td></tr>`;
+                return;
+            }
+
+            const methodLabels = {
+                user_based: 'User-Based',
+                item_based: 'Item-Based',
+                svd: 'SVD',
+                knn: 'KNN',
+                slope_one: 'Slope One'
+            };
+
+            let bestMethod = null;
+            let bestRmse = Infinity;
+
+            data.cf_methods.forEach(row => {
+                if (row.error) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${row.method}</td><td colspan="6" style="color:#FF6584;">Error: ${row.error}</td>`;
+                    tbody.appendChild(tr);
+                    return;
+                }
+
+                if (row.RMSE < bestRmse) {
+                    bestRmse = row.RMSE;
+                    bestMethod = row.method;
+                }
+
+                const isBest = row.method === data.best_cf_method;
+                const tr = document.createElement('tr');
+                if (isBest) tr.className = 'best-row';
+                tr.innerHTML = `
+                    <td><strong>${methodLabels[row.method] || row.method}</strong> ${isBest ? '<span class="badge-best">BEST</span>' : ''}</td>
+                    <td>${row.RMSE.toFixed(4)}</td>
+                    <td>${row.MAE.toFixed(4)}</td>
+                    <td>${row['Precision@5'].toFixed(4)}</td>
+                    <td>${row['Recall@5'].toFixed(4)}</td>
+                    <td>${row['F1@5'].toFixed(4)}</td>
+                    <td>${row.Coverage.toFixed(4)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (data.best_cf_method) {
+                document.getElementById('bestCfBadge').classList.remove('hidden');
+                document.getElementById('bestCfName').textContent =
+                    (methodLabels[data.best_cf_method] || data.best_cf_method) +
+                    ` (RMSE: ${bestRmse.toFixed(4)})`;
+            }
+        }
+
+        function renderCfChart(data) {
+            if (!data.cf_methods || data.cf_methods.length === 0) return;
+
+            const methods = data.cf_methods.filter(r => !r.error);
+            const methodLabels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
+
+            const labels = methods.map(r => methodLabels[r.method] || r.method);
+            const rmseData = methods.map(r => r.RMSE);
+            const maeData = methods.map(r => r.MAE);
+
+            if (cfChartInstance) cfChartInstance.destroy();
+
+            const ctx = document.getElementById('cfChart').getContext('2d');
+            cfChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'RMSE (lower is better)',
+                            data: rmseData,
+                            backgroundColor: 'rgba(108, 99, 255, 0.6)',
+                            borderColor: '#6C63FF',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'MAE (lower is better)',
+                            data: maeData,
+                            backgroundColor: 'rgba(255, 101, 132, 0.6)',
+                            borderColor: '#FF6584',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'rgba(255,255,255,0.7)' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderApproachTable(data) {
+            const tbody = document.getElementById('approachTableBody');
+            tbody.innerHTML = '';
+
+            if (!data.approaches || data.approaches.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:rgba(255,255,255,0.4);">Approach comparison requires more data. Try running again.</td></tr>`;
+                return;
+            }
+
+            data.approaches.forEach(row => {
+                if (row.error) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${row.approach}</td><td colspan="2" style="color:#FF6584;">${row.error}</td>`;
+                    tbody.appendChild(tr);
+                    return;
+                }
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${row.approach}</strong></td>
+                    <td>${row['Precision@5']?.toFixed(4) || 'N/A'}</td>
+                    <td>${row['Recall@5']?.toFixed(4) || 'N/A'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderAnalysis(data) {
+            document.getElementById('analysisSection').classList.remove('hidden');
+
+            const methodLabels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
+
+            if (data.best_cf_method) {
+                document.getElementById('analysisBestMethod').innerHTML =
+                    `<strong>${methodLabels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE among all CF methods. ` +
+                    `SVD (Matrix Factorization) typically performs best because it captures latent factors in the user-item interaction matrix, ` +
+                    `handling sparsity better than memory-based methods like User-Based or Item-Based CF.`;
+            }
+
+            document.getElementById('analysisBestApproach').innerHTML =
+                `<strong>Collaborative Filtering</strong> generally performs best when sufficient rating data exists for a user. ` +
+                `Content-Based works well for new items but suffers from overspecialization. ` +
+                `Knowledge-Based excels in cold-start scenarios and when users have explicit constraints.`;
+
+            document.getElementById('analysisConditions').innerHTML = `
+                <b>• Dense user data:</b> Collaborative Filtering (leverages peer patterns)<br>
+                <b>• Cold-start user:</b> Knowledge-Based (no history needed)<br>
+                <b>• Cold-start item:</b> Content-Based (matches item features)<br>
+                <b>• Explicit constraints:</b> Knowledge-Based (precise filtering)<br>
+                <b>• Niche categories:</b> Content-Based (item features override sparsity)
+            `;
+
+            document.getElementById('analysisWhy').innerHTML =
+                `Differences arise from algorithmic biases: CF relies on the collective behavior of users, ` +
+                `making it powerful for popular items but weak for new users/items. Content-Based depends on ` +
+                `feature representation quality and tends to overspecialize. Knowledge-Based is deterministic ` +
+                `and transparent but requires explicit user input and domain rules. The choice depends on data ` +
+                `availability, user context, and the specific recommendation goal.`;
+        }
+
+        if (localStorage.getItem('autoEval') === 'true') {
+            localStorage.removeItem('autoEval');
+            runEvaluation();
+        }
+    </script>
+</body>
+</html>

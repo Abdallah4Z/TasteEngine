@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TasteEngine — Recommendations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">Taste<span>Engine</span></a>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/recommend" class="active">Recommend</a>
+            <a href="/evaluate">Evaluate</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row">
+            <div class="glass">
+                <h2 class="glass-header">User</h2>
+                <div class="form-group">
+                    <label class="form-label">Select User</label>
+                    <select id="userSelect" onchange="onUserChange()">
+                        <option value="">-- Choose --</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="profileMini" class="hidden mt-1">
+                    <div class="compact-row">
+                        <div class="profile-avatar" id="miniAvatar" style="width:40px;height:40px;font-size:1rem;">A</div>
+                        <div>
+                            <div id="miniName" style="font-weight:600;color:#fff;font-size:0.9rem;"></div>
+                            <div id="miniCats" style="font-size:0.8rem;color:rgba(255,255,255,0.5);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass">
+                <h2 class="glass-header">Number of Recommendations</h2>
+                <div class="form-group">
+                    <input type="number" id="nRecs" value="10" min="1" max="50" style="max-width: 100px;">
+                </div>
+            </div>
+        </div>
+
+        <div class="glass">
+            <h2 class="glass-header">Choose Approach & Method</h2>
+            <div class="btn-group" id="approachGroup">
+                <button class="btn-approach" data-approach="cf" onclick="selectApproach('cf')">
+                    <span class="icon">🤝</span>
+                    Collaborative Filtering
+                </button>
+                <button class="btn-approach" data-approach="content" onclick="selectApproach('content')">
+                    <span class="icon">🏷️</span>
+                    Content-Based
+                </button>
+                <button class="btn-approach" data-approach="knowledge" onclick="selectApproach('knowledge')">
+                    <span class="icon">⚙️</span>
+                    Knowledge-Based
+                </button>
+            </div>
+
+            <div id="methodsContainer" class="mt-2">
+                {% for key, approach in approaches.items() %}
+                <div id="methods-{{ key }}" class="methods-group hidden">
+                    <div class="btn-group">
+                        {% for m in approach.methods %}
+                        <button class="btn-method" data-method="{{ m.id }}" data-approach="{{ key }}" onclick="selectMethod('{{ key }}', '{{ m.id }}')">{{ m.label }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="mt-2">
+                <button class="btn btn-primary" onclick="getRecommendations()">🚀 Generate Recommendations</button>
+            </div>
+        </div>
+
+        <div id="resultsContainer" class="hidden">
+            <div class="tabs" id="resultTabs">
+                <button class="tab active" data-tab="tab-cards" onclick="switchTab('tab-cards')">📋 Cards</button>
+                <button class="tab" data-tab="tab-compare" onclick="switchTab('tab-compare')">🔄 Compare Approaches</button>
+            </div>
+
+            <div id="tab-cards" class="tab-content active">
+                <div class="glass">
+                    <h2 class="glass-header" id="resultHeader">Recommendations</h2>
+                    <div id="productGrid" class="product-grid mt-2"></div>
+                </div>
+            </div>
+
+            <div id="tab-compare" class="tab-content">
+                <div class="glass">
+                    <h2 class="glass-header">Compare All Approaches</h2>
+                    <p style="color:rgba(255,255,255,0.5);font-size:0.85rem;margin-bottom:1rem;">Select a user first, then click below to compare.</p>
+                    <button class="btn btn-primary" onclick="compareAll()">🔄 Compare All Approaches</button>
+                    <div id="compareResults" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loadingIndicator" class="loading hidden">
+            <div class="spinner"></div>
+            <span>Generating recommendations...</span>
+        </div>
+    </div>
+
+    <script>
+        const userData = {{ users | tojson | safe }};
+        const approaches = {{ approaches | tojson | safe }};
+        let currentApproach = 'cf';
+        let currentMethod = 'user_based';
+
+        const savedUser = localStorage.getItem('selectedUser');
+        if (savedUser) {
+            document.getElementById('userSelect').value = savedUser;
+            onUserChange();
+        }
+
+        document.getElementById('userSelect').addEventListener('change', function() {
+            localStorage.setItem('selectedUser', this.value);
+        });
+
+        function onUserChange() {
+            const uid = parseInt(document.getElementById('userSelect').value);
+            if (!uid) {
+                document.getElementById('profileMini').classList.add('hidden');
+                return;
+            }
+            const user = userData.find(u => u.id === uid);
+            if (!user) return;
+
+            document.getElementById('profileMini').classList.remove('hidden');
+            document.getElementById('miniAvatar').textContent = user.name.charAt(0);
+            document.getElementById('miniName').textContent = user.name;
+            document.getElementById('miniCats').textContent = 'Categories: ' + (user.categories || []).join(', ');
+        }
+
+        function selectApproach(approach) {
+            currentApproach = approach;
+
+            document.querySelectorAll('.btn-approach').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.btn-approach[data-approach="${approach}"]`).classList.add('active');
+
+            document.querySelectorAll('.methods-group').forEach(g => g.classList.add('hidden'));
+            document.getElementById(`methods-${approach}`).classList.remove('hidden');
+
+            const firstMethod = document.querySelector(`#methods-${approach} .btn-method`);
+            if (firstMethod) {
+                currentMethod = firstMethod.dataset.method;
+                document.querySelectorAll('.btn-method').forEach(b => b.classList.remove('active'));
+                firstMethod.classList.add('active');
+            }
+
+            document.getElementById('resultsContainer').classList.add('hidden');
+        }
+
+        function selectMethod(approach, method) {
+            currentMethod = method;
+            document.querySelectorAll(`#methods-${approach} .btn-method`).forEach(b => b.classList.remove('active'));
+            document.querySelector(`#methods-${approach} .btn-method[data-method="${method}"]`).classList.add('active');
+        }
+
+        selectApproach('cf');
+
+        function getRecommendations(userOverride, approachOverride, methodOverride) {
+            const uid = parseInt(userOverride || document.getElementById('userSelect').value);
+            const approach = approachOverride || currentApproach;
+            const method = methodOverride || currentMethod;
+            const n = parseInt(document.getElementById('nRecs').value) || 10;
+
+            if (!uid) {
+                alert('Please select a user first.');
+                return;
+            }
+
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('resultsContainer').classList.add('hidden');
+
+            fetch('/api/recommend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: uid, approach: approach, method: method, n: n })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+
+                if (data.error) {
+                    document.getElementById('productGrid').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>${data.error}</p></div>`;
+                    document.getElementById('resultsContainer').classList.remove('hidden');
+                    return;
+                }
+
+                const approachInfo = approaches[approach];
+                const methodInfo = approachInfo.methods.find(m => m.id === method);
+                document.getElementById('resultHeader').textContent =
+                    `Recommendations via ${approachInfo.label} — ${methodInfo ? methodInfo.label : method}`;
+
+                const grid = document.getElementById('productGrid');
+                grid.innerHTML = '';
+
+                if (!data.recommendations || data.recommendations.length === 0) {
+                    grid.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No recommendations found. Try a different approach.</p></div>`;
+                    document.getElementById('resultsContainer').classList.remove('hidden');
+                    return;
+                }
+
+                data.recommendations.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'product-card';
+
+                    const stars = '★'.repeat(Math.floor(item.avg_rating)) + '☆'.repeat(5 - Math.floor(item.avg_rating));
+
+                    card.innerHTML = `
+                        <div class="product-icon">${getCategoryIcon(item.category)}</div>
+                        <div class="product-name">${item.name}</div>
+                        <div class="product-meta">${item.brand} · ${item.subcategory}</div>
+                        <div class="compact-row">
+                            <div class="product-price">$${item.price.toFixed(2)}</div>
+                            <div class="product-rating">${stars} ${item.avg_rating}</div>
+                        </div>
+                        <div class="product-explanation">💡 ${item.explanation}</div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                document.getElementById('resultsContainer').classList.remove('hidden');
+                switchTab('tab-cards');
+            })
+            .catch(err => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                document.getElementById('productGrid').innerHTML = `<div class="empty-state"><div class="icon">❌</div><p>Error: ${err.message}</p></div>`;
+                document.getElementById('resultsContainer').classList.remove('hidden');
+            });
+        }
+
+        function compareAll() {
+            const uid = parseInt(document.getElementById('userSelect').value);
+            if (!uid) {
+                alert('Please select a user first.');
+                return;
+            }
+
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            const container = document.getElementById('compareResults');
+            container.innerHTML = '';
+
+            const cfMethods = approaches.cf.methods.map(m => m.id);
+            const promises = [];
+
+            cfMethods.forEach(m => {
+                promises.push(
+                    fetch('/api/recommend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: uid, approach: 'cf', method: m, n: 5 })
+                    }).then(r => r.json()).then(data => ({ approach: 'cf', method: m, data }))
+                );
+            });
+
+            Object.keys(approaches).forEach(app => {
+                const methods = approaches[app].methods;
+                methods.forEach(m => {
+                    if (app !== 'cf') {
+                        promises.push(
+                            fetch('/api/recommend', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ user_id: uid, approach: app, method: m.id, n: 5 })
+                            }).then(r => r.json()).then(data => ({ approach: app, method: m.id, data }))
+                        );
+                    }
+                });
+            });
+
+            Promise.all(promises).then(results => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                document.getElementById('resultsContainer').classList.remove('hidden');
+                switchTab('tab-compare');
+
+                container.innerHTML = '<div class="compare-view"></div>';
+                const compareGrid = container.querySelector('.compare-view');
+
+                results.forEach(result => {
+                    const appInfo = approaches[result.approach];
+                    const methodInfo = appInfo.methods.find(m => m.id === result.method);
+                    const col = document.createElement('div');
+                    col.className = 'compare-column';
+                    col.innerHTML = `<h3>${appInfo.icon} ${methodInfo ? methodInfo.label : result.method}</h3>`;
+
+                    if (result.data.error) {
+                        col.innerHTML += `<p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">${result.data.error}</p>`;
+                    } else if (!result.data.recommendations || result.data.recommendations.length === 0) {
+                        col.innerHTML += `<p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">No results</p>`;
+                    } else {
+                        const list = document.createElement('div');
+                        result.data.recommendations.forEach((item, i) => {
+                            const div = document.createElement('div');
+                            div.style.cssText = 'padding:0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size:0.8rem;';
+                            div.innerHTML = `
+                                <div style="font-weight:500;color:#fff;">${i+1}. ${item.name}</div>
+                                <div style="color:rgba(255,255,255,0.4);">$${item.price.toFixed(2)} · ${item.brand}</div>
+                            `;
+                            list.appendChild(div);
+                        });
+                        col.appendChild(list);
+                    }
+                    compareGrid.appendChild(col);
+                });
+            }).catch(err => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                container.innerHTML = `<div class="empty-state"><div class="icon">❌</div><p>Error: ${err.message}</p></div>`;
+            });
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tabId}"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        function getCategoryIcon(category) {
+            const icons = {
+                'Electronics': '💻',
+                'Clothing': '👕',
+                'Home & Kitchen': '🏠',
+                'Books': '📚',
+                'Sports': '⚽',
+                'Beauty': '💄',
+                'Toys': '🧸',
+                'Automotive': '🚗'
+            };
+            return icons[category] || '📦';
+        }
+    </script>
+</body>
+</html>

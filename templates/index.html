@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TasteEngine — Recommender System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">Taste<span>Engine</span></a>
+        <div class="nav-links">
+            <a href="/" class="active">Home</a>
+            <a href="/recommend">Recommend</a>
+            <a href="/evaluate">Evaluate</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="glass">
+            <h1 class="glass-header">Welcome to TasteEngine</h1>
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">An intelligent multi-approach recommender system. Compare Collaborative Filtering, Content-Based, and Knowledge-Based recommendations side by side.</p>
+        </div>
+
+        <div class="row">
+            <div class="glass" id="userSelectPanel">
+                <h2 class="glass-header">Select a User</h2>
+                <div class="form-group">
+                    <label class="form-label">User</label>
+                    <select id="userSelect">
+                        <option value="">-- Choose a user --</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.name }} (Age: {{ u.age }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="profileCard" class="profile-card mt-2 hidden">
+                    <div class="profile-avatar" id="profileAvatar">A</div>
+                    <div class="profile-info">
+                        <div class="profile-name" id="profileName">Alice</div>
+                        <div class="profile-detail" id="profileDetail">Age: 28</div>
+                        <div class="profile-detail">Budget: $<span id="profileBudgetMin">0</span> - $<span id="profileBudgetMax">0</span></div>
+                        <div class="profile-tags mt-1" id="profileTags"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass">
+                <h2 class="glass-header">Quick Actions</h2>
+                <p style="color: rgba(255,255,255,0.6); font-size: 0.85rem; margin-bottom: 1rem;">Get started by selecting a user above, then:</p>
+                <a href="/recommend" class="btn btn-primary" style="display: inline-block; text-decoration: none; margin-bottom: 0.5rem;">🔍 Get Recommendations</a>
+                <br>
+                <a href="/evaluate" class="btn btn-secondary" style="display: inline-block; text-decoration: none;">📊 View Evaluation</a>
+            </div>
+        </div>
+
+        <div class="glass">
+            <h2 class="glass-header">Available Approaches</h2>
+            <div class="row" style="grid-template-columns: 1fr 1fr 1fr;">
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤝</div>
+                    <h3 style="color: #fff; font-size: 1rem; margin-bottom: 0.3rem;">Collaborative Filtering</h3>
+                    <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem;">5 methods: User, Item, SVD, KNN, Slope One</p>
+                </div>
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🏷️</div>
+                    <h3 style="color: #fff; font-size: 1rem; margin-bottom: 0.3rem;">Content-Based</h3>
+                    <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem;">TF-IDF + Cosine Similarity, Feature Matching</p>
+                </div>
+                <div style="text-align: center; padding: 1rem;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚙️</div>
+                    <h3 style="color: #fff; font-size: 1rem; margin-bottom: 0.3rem;">Knowledge-Based</h3>
+                    <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem;">Constraint, Rule, Utility-based filtering</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const userData = {{ users | tojson | safe }};
+
+        document.getElementById('userSelect').addEventListener('change', function() {
+            const uid = parseInt(this.value);
+            if (!uid) {
+                document.getElementById('profileCard').classList.add('hidden');
+                return;
+            }
+            const user = userData.find(u => u.id === uid);
+            if (!user) return;
+
+            document.getElementById('profileCard').classList.remove('hidden');
+            document.getElementById('profileAvatar').textContent = user.name.charAt(0);
+            document.getElementById('profileName').textContent = user.name;
+            document.getElementById('profileDetail').textContent = `Age: ${user.age}`;
+            document.getElementById('profileBudgetMin').textContent = user.budget_min.toFixed(2);
+            document.getElementById('profileBudgetMax').textContent = user.budget_max.toFixed(2);
+
+            const tagsContainer = document.getElementById('profileTags');
+            tagsContainer.innerHTML = '';
+            user.categories.forEach(cat => {
+                if (cat) {
+                    const tag = document.createElement('span');
+                    tag.className = 'tag';
+                    tag.textContent = cat;
+                    tagsContainer.appendChild(tag);
+                }
+            });
+            user.brands.forEach(b => {
+                if (b) {
+                    const tag = document.createElement('span');
+                    tag.className = 'tag';
+                    tag.style.borderColor = 'rgba(255,101,132,0.3)';
+                    tag.style.background = 'rgba(255,101,132,0.15)';
+                    tag.style.color = '#ff9eb2';
+                    tag.textContent = b;
+                    tagsContainer.appendChild(tag);
+                }
+            });
+
+            localStorage.setItem('selectedUser', uid);
+        });
+
+        const savedUser = localStorage.getItem('selectedUser');
+        if (savedUser) {
+            document.getElementById('userSelect').value = savedUser;
+            document.getElementById('userSelect').dispatchEvent(new Event('change'));
+        }
+    </script>
+</body>
+</html>

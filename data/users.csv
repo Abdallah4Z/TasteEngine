@@ -1,0 +1,201 @@
+user_id,name,age,preferred_categories,budget_min,budget_max,favorite_brands
+1,Ben_1,27,"Books,Home & Kitchen,Toys",75.16,812.42,Sony
+2,Olivia_2,28,"Electronics,Automotive",145.08,484.37,
+3,Leo_3,64,Books,101.42,923.67,
+4,Frank_4,27,Beauty,58.38,1096.56,
+5,Ivy_5,28,"Books,Toys,Clothing",193.36,423.59,"Sony,Meguiar's"
+6,Sam_6,23,"Sports,Electronics",127.81,951.33,"H&M,Neutrogena"
+7,Henry_7,40,"Toys,Sports,Electronics",106.12,1042.73,"Random House,HarperCollins"
+8,Bob_8,24,"Toys,Sports",95.96,350.2,
+9,Grace_9,23,Beauty,51.82,410.21,
+10,Grace_10,34,Sports,105.42,1018.73,
+11,David_11,40,"Clothing,Toys,Books",99.69,968.71,OXO
+12,Uma_12,31,"Beauty,Books,Sports",33.33,1354.17,
+13,Ben_13,35,"Beauty,Automotive",82.14,988.07,
+14,Eve_14,55,"Automotive,Beauty",158.15,373.79,Armor All
+15,Uma_15,24,"Toys,Home & Kitchen",90.19,653.3,Neutrogena
+16,Charlie_16,54,"Sports,Toys,Electronics",163.41,1608.45,
+17,Jack_17,64,"Books,Clothing",131.07,1602.91,Melissa & Doug
+18,Grace_18,32,Home & Kitchen,178.34,1121.34,Columbia
+19,Xander_19,21,"Books,Electronics,Automotive",177.03,1596.89,"Puma,H&M"
+20,Ben_20,46,Sports,134.5,983.24,"Estee Lauder,Samsung"
+21,Mia_21,48,"Books,Electronics,Beauty",10.21,866.67,
+22,Clara_22,29,"Automotive,Toys,Books",32.01,628.22,
+23,Charlie_23,23,"Home & Kitchen,Sports,Automotive",84.51,394.78,
+24,Clara_24,39,"Toys,Sports",99.98,233.96,"Samsung,L'Oreal"
+25,Olivia_25,33,Clothing,69.27,584.35,Samsung
+26,Henry_26,28,Books,147.16,1149.79,
+27,Alice_27,55,Clothing,29.53,907.34,"Under Armour,LEGO"
+28,David_28,37,"Electronics,Beauty",158.93,906.24,"Meguiar's,Penguin"
+29,Sam_29,49,Home & Kitchen,181.13,842.63,IKEA
+30,Olivia_30,48,"Books,Toys,Sports",167.49,842.28,"Cuisinart,Meguiar's"
+31,Frank_31,37,"Electronics,Home & Kitchen,Clothing",149.25,434.7,
+32,Alice_32,25,Toys,189.48,1230.19,H&M
+33,Wendy_33,36,Clothing,79.63,704.08,
+34,Sam_34,46,Beauty,121.54,415.78,Under Armour
+35,Bob_35,31,Beauty,112.44,613.84,Clinique
+36,Zack_36,59,Electronics,90.51,1108.46,Puma
+37,Diana_37,20,Clothing,168.05,1188.97,"Clinique,L'Oreal"
+38,Uma_38,37,"Automotive,Home & Kitchen",144.66,247.09,
+39,Wendy_39,62,"Beauty,Toys",68.05,693.67,"Zara,Spalding"
+40,Noah_40,33,"Automotive,Clothing",37.81,620.73,
+41,Bob_41,21,Clothing,106.17,793.46,"LG,Hasbro"
+42,Rachel_42,54,"Electronics,Toys,Clothing",43.61,654.87,
+43,David_43,19,"Electronics,Books",46.04,993.51,
+44,Uma_44,43,"Home & Kitchen,Beauty",102.69,311.81,"LEGO,Estee Lauder"
+45,Xander_45,52,Electronics,76.44,1249.69,"Cuisinart,Adidas"
+46,Quinn_46,57,"Sports,Beauty",41.1,488.1,
+47,Leo_47,49,"Automotive,Toys,Books",177.06,601.79,"Cuisinart,KitchenAid"
+48,Paul_48,25,Toys,177.17,1180.63,
+49,Jack_49,38,"Sports,Beauty",115.3,172.88,Estee Lauder
+50,Tina_50,21,"Electronics,Sports",166.76,939.23,LEGO
+51,Kate_51,47,"Clothing,Books",188.73,614.71,Columbia
+52,Uma_52,21,"Automotive,Sports",34.32,1363.42,
+53,Jack_53,43,"Books,Home & Kitchen",147.78,475.01,
+54,Sam_54,42,Home & Kitchen,146.8,802.89,
+55,Grace_55,39,"Home & Kitchen,Toys,Books",22.86,1099.22,
+56,Bob_56,23,"Home & Kitchen,Sports",136.2,499.53,Penguin
+57,Sam_57,22,"Automotive,Beauty,Electronics",62.52,565.43,
+58,Olivia_58,32,"Electronics,Home & Kitchen",41.55,981.09,
+59,Charlie_59,44,"Sports,Clothing",79.1,1191.42,"Dyson,Zara"
+60,Paul_60,38,"Automotive,Toys",150.54,477.87,"Meguiar's,Simon & Schuster"
+61,Rachel_61,50,"Electronics,Sports",53.08,656.42,Estee Lauder
+62,David_62,58,"Toys,Home & Kitchen,Beauty",179.54,498.27,"Neutrogena,Dyson"
+63,Wendy_63,24,"Beauty,Electronics",151.28,935.37,"Nike,Apple"
+64,Ivy_64,26,Clothing,119.21,212.23,"Melissa & Doug,HarperCollins"
+65,Ivy_65,56,"Books,Beauty",123.75,901.87,"OXO,The North Face"
+66,Wendy_66,57,"Beauty,Books,Sports",81.17,373.12,
+67,Grace_67,21,Sports,132.71,1106.22,"Levi's,Maybelline"
+68,Mia_68,64,"Clothing,Home & Kitchen",115.21,950.68,Macmillan
+69,Ben_69,22,Home & Kitchen,190.33,984.04,Estee Lauder
+70,Victor_70,27,"Home & Kitchen,Toys",149.28,965.72,Maybelline
+71,Quinn_71,51,"Home & Kitchen,Electronics",136.7,492.81,Melissa & Doug
+72,Kate_72,58,Books,62.47,1137.59,"HP,L'Oreal"
+73,Leo_73,54,"Clothing,Home & Kitchen",96.96,449.84,Armor All
+74,Mia_74,27,Automotive,183.1,1448.58,
+75,Diana_75,31,"Sports,Beauty",11.89,734.83,HP
+76,Ivy_76,46,"Electronics,Beauty",191.98,1608.93,
+77,Xander_77,49,"Beauty,Clothing",47.21,301.37,Apple
+78,David_78,20,"Clothing,Automotive",196.43,1396.49,"Dyson,Bosch"
+79,Clara_79,39,Home & Kitchen,130.53,502.54,Maybelline
+80,Ava_80,28,Books,139.11,515.2,
+81,Kate_81,38,"Toys,Automotive,Sports",181.71,1458.19,
+82,Uma_82,31,"Home & Kitchen,Beauty,Sports",45.37,576.14,"Meguiar's,Apple"
+83,Diana_83,64,Home & Kitchen,145.4,1379.73,Under Armour
+84,Bob_84,58,Clothing,32.59,1191.43,"Fisher-Price,Hasbro"
+85,Victor_85,54,"Sports,Electronics,Automotive",129.32,538.21,
+86,Quinn_86,29,"Beauty,Clothing",73.47,1185.88,Estee Lauder
+87,Charlie_87,27,"Automotive,Toys",194.02,1119.29,"Puma,KitchenAid"
+88,Mia_88,21,"Beauty,Sports,Clothing",147.89,1092.9,L'Oreal
+89,Kate_89,33,"Books,Electronics",103.77,564.56,Apple
+90,Wendy_90,20,"Home & Kitchen,Sports",40.49,192.7,Armor All
+91,Wendy_91,34,"Books,Sports,Clothing",40.47,1067.26,
+92,Noah_92,64,"Books,Home & Kitchen,Beauty",107.84,391.82,
+93,David_93,34,"Electronics,Books",120.61,342.31,HarperCollins
+94,Zack_94,56,Clothing,100.11,963.09,
+95,Kate_95,49,"Clothing,Home & Kitchen",166.06,1438.88,"Adidas,Wilson"
+96,Ava_96,28,"Electronics,Sports",101.96,159.66,Dyson
+97,Paul_97,34,"Electronics,Beauty",192.11,867.19,Columbia
+98,Xander_98,57,"Books,Electronics,Home & Kitchen",119.57,267.09,"OXO,Dell"
+99,Sam_99,60,"Automotive,Toys",186.35,1583.6,"Spalding,Bose"
+100,Alice_100,60,"Electronics,Sports,Clothing",177.51,1075.03,
+101,Frank_101,19,"Sports,Beauty",53.85,1431.57,"Estee Lauder,Adidas"
+102,David_102,57,"Toys,Electronics,Books",79.46,642.32,
+103,Diana_103,54,"Sports,Electronics",117.05,1332.57,
+104,Frank_104,27,"Sports,Electronics",93.93,1571.07,Estee Lauder
+105,Mia_105,43,"Clothing,Sports",135.72,390.49,Hasbro
+106,Rachel_106,44,Sports,98.93,825.06,
+107,Clara_107,33,"Books,Sports,Home & Kitchen",156.2,783.11,Bosch
+108,Sam_108,28,"Automotive,Sports,Clothing",172.73,1433.58,H&M
+109,Henry_109,50,"Toys,Sports,Electronics",40.93,953.99,"Penguin,Meguiar's"
+110,Clara_110,50,"Electronics,Books",130.13,1026.36,Armor All
+111,Grace_111,48,"Beauty,Home & Kitchen",51.47,1536.15,
+112,Alice_112,59,"Toys,Books",19.84,877.94,
+113,Quinn_113,55,Toys,36.52,922.41,
+114,Ava_114,30,Beauty,24.55,684.65,Hasbro
+115,Paul_115,32,"Electronics,Automotive,Clothing",89.64,383.54,
+116,Bob_116,48,"Books,Clothing,Sports",178.37,1583.11,"Wilson,HP"
+117,Victor_117,23,"Automotive,Clothing,Sports",14.9,940.02,"Puma,IKEA"
+118,Victor_118,28,Electronics,12.15,1203.84,"L'Oreal,Penguin"
+119,Eve_119,44,"Toys,Beauty,Home & Kitchen",87.47,319.54,Canon
+120,Bob_120,27,"Beauty,Automotive",166.42,1022.9,"KitchenAid,Hasbro"
+121,Paul_121,62,"Toys,Beauty",74.85,818.72,Bose
+122,Alice_122,62,"Clothing,Electronics",135.75,1104.63,The North Face
+123,Mia_123,22,"Beauty,Clothing,Home & Kitchen",43.61,1525.25,"Dell,Wilson"
+124,Henry_124,25,"Sports,Beauty",133.86,1390.86,"Mattel,Levi's"
+125,Kate_125,49,Sports,57.67,282.32,"Estee Lauder,Zara"
+126,Leo_126,51,Sports,123.09,1437.36,"Bose,IKEA"
+127,Eve_127,35,"Home & Kitchen,Books,Toys",163.84,1592.11,"OXO,H&M"
+128,Uma_128,49,"Beauty,Electronics,Books",45.05,388.38,"Columbia,The North Face"
+129,Ben_129,43,"Clothing,Sports",141.24,1247.98,
+130,Rachel_130,30,"Automotive,Electronics,Sports",20.53,550.69,"IKEA,L'Oreal"
+131,Sam_131,60,"Electronics,Books,Sports",89.8,978.42,"Samsung,Dell"
+132,Sam_132,64,"Sports,Electronics,Beauty",142.04,1014.76,"L'Oreal,Meguiar's"
+133,Bob_133,46,"Sports,Clothing,Books",44.35,484.11,"Puma,Neutrogena"
+134,Charlie_134,54,Home & Kitchen,183.23,291.65,"Michelin,IKEA"
+135,Noah_135,36,"Sports,Clothing",102.37,310.44,Canon
+136,Henry_136,21,"Clothing,Electronics,Toys",192.3,557.98,"Apple,Samsung"
+137,Bob_137,32,"Books,Automotive",16.32,243.06,
+138,Frank_138,31,"Home & Kitchen,Books,Automotive",110.71,839.28,
+139,Uma_139,39,"Books,Beauty,Automotive",58.76,1199.33,
+140,Grace_140,51,"Clothing,Books",118.44,862.56,Canon
+141,Wendy_141,47,"Electronics,Beauty",116.86,572.06,Random House
+142,Yara_142,61,"Toys,Automotive",32.55,331.77,
+143,Ava_143,38,Electronics,31.96,1294.77,"Levi's,Wilson"
+144,Bob_144,50,"Books,Electronics,Home & Kitchen",129.43,1097.66,
+145,Ivy_145,58,"Sports,Electronics,Books",73.61,578.48,Cuisinart
+146,Bob_146,49,Clothing,118.38,1011.65,L'Oreal
+147,Uma_147,20,"Beauty,Toys",164.24,709.92,"Bosch,Puma"
+148,Alice_148,30,"Home & Kitchen,Sports",91.47,219.45,Wilson
+149,Uma_149,54,Automotive,71.19,932.82,The North Face
+150,Tina_150,25,Home & Kitchen,36.0,187.09,"Michelin,Bose"
+151,Olivia_151,50,Sports,134.22,692.01,
+152,David_152,61,Sports,117.28,916.39,
+153,Henry_153,42,"Books,Electronics",63.56,574.72,Adidas
+154,Diana_154,38,"Sports,Beauty",199.15,902.05,
+155,Mia_155,44,"Clothing,Electronics,Books",70.4,133.13,Mattel
+156,Bob_156,53,Books,113.09,1110.79,Penguin
+157,Quinn_157,43,Electronics,100.34,1247.89,
+158,Victor_158,29,"Beauty,Electronics,Automotive",21.82,1264.74,
+159,Uma_159,32,Beauty,43.38,837.51,"Armor All,Mattel"
+160,Quinn_160,53,"Automotive,Toys",102.61,1523.4,WeatherTech
+161,Xander_161,24,"Beauty,Sports",14.57,839.07,HarperCollins
+162,Sam_162,62,Books,11.73,1001.76,Mattel
+163,Leo_163,59,Electronics,158.08,965.7,Meguiar's
+164,Xander_164,52,"Automotive,Clothing,Toys",27.38,1159.95,
+165,Ava_165,23,Beauty,157.77,535.24,"Sony,Wilson"
+166,Grace_166,56,Electronics,157.42,1378.96,Sony
+167,Grace_167,59,"Books,Electronics,Clothing",168.65,1248.66,"Melissa & Doug,Random House"
+168,Jack_168,29,"Books,Automotive",77.5,1117.14,
+169,Zack_169,55,"Beauty,Toys,Electronics",123.56,1434.62,"L'Oreal,Bose"
+170,Paul_170,55,"Clothing,Home & Kitchen,Books",199.01,1650.52,
+171,Sam_171,60,"Toys,Home & Kitchen,Electronics",141.83,635.26,
+172,Uma_172,44,Home & Kitchen,164.44,1053.64,Bosch
+173,Zack_173,21,"Electronics,Books,Beauty",66.02,630.11,"IKEA,Meguiar's"
+174,Rachel_174,33,Toys,60.56,167.12,
+175,Quinn_175,33,"Books,Automotive,Clothing",11.3,738.48,
+176,Charlie_176,56,"Sports,Beauty",172.85,1407.66,
+177,Grace_177,31,"Beauty,Toys,Automotive",188.74,492.17,
+178,Jack_178,26,Home & Kitchen,10.7,296.41,
+179,Olivia_179,23,"Home & Kitchen,Electronics",28.16,1380.47,"Neutrogena,Columbia"
+180,Charlie_180,40,Toys,159.44,562.82,
+181,Noah_181,22,"Toys,Beauty",131.09,283.6,Levi's
+182,Sam_182,54,"Home & Kitchen,Beauty,Automotive",129.33,1382.74,IKEA
+183,Sam_183,40,"Home & Kitchen,Toys,Books",157.82,527.5,"Samsung,LEGO"
+184,Jack_184,49,"Sports,Electronics,Beauty",40.34,1235.96,
+185,Paul_185,18,Automotive,35.46,253.31,"Random House,Mattel"
+186,Clara_186,55,"Books,Home & Kitchen",165.65,993.61,
+187,Mia_187,36,Beauty,129.1,546.24,"Under Armour,Wilson"
+188,Charlie_188,43,"Clothing,Home & Kitchen",187.87,982.47,
+189,Zack_189,31,Automotive,103.16,1381.0,"LEGO,H&M"
+190,Uma_190,55,"Home & Kitchen,Automotive,Clothing",150.98,276.78,Mattel
+191,Olivia_191,21,"Electronics,Sports",78.72,285.9,
+192,Kate_192,54,"Sports,Books",43.23,1068.56,"Neutrogena,Penguin"
+193,Quinn_193,49,"Home & Kitchen,Sports,Electronics",159.73,640.69,The North Face
+194,David_194,25,"Home & Kitchen,Books,Beauty",144.37,470.42,Meguiar's
+195,Ben_195,38,"Automotive,Books,Sports",39.76,1503.16,"The North Face,Mattel"
+196,Charlie_196,63,"Books,Clothing",82.65,775.18,"Ninja,HP"
+197,Noah_197,56,Toys,137.68,1109.05,"H&M,Under Armour"
+198,Mia_198,45,"Books,Sports,Automotive",63.16,932.34,Wilson
+199,Paul_199,25,Sports,57.91,819.58,
+200,Ben_200,23,"Automotive,Toys,Beauty",144.51,1229.31,"Bosch,LG"
