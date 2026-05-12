@@ -1,586 +1,333 @@
-{% extends "base.html" %}
-{% block title %}TasteEngine — Evaluation{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TasteEngine — Evaluation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">Taste<span>Engine</span></a>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/recommend">Recommend</a>
+            <a href="/evaluate" class="active">Evaluate</a>
+        </div>
+    </nav>
 
-{% block head_extra %}
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-{% endblock %}
+    <div class="container">
+        <div class="glass">
+            <h2 class="glass-header">Evaluation & Comparison Dashboard</h2>
+            <p class="hero-text">Comprehensive analysis of all recommendation methods and approaches using 6 evaluation metrics.</p>
+            <div class="mt-2">
+                <button class="btn btn-primary" onclick="runEvaluation()">▶️ Run Evaluation</button>
+            </div>
+        </div>
 
-{% block breadcrumb %}
-<ul class="breadcrumb">
-  <li><a href="/">Home</a><span class="sep">/</span></li>
-  <li class="current">Evaluate</li>
-</ul>
-{% endblock %}
+        <div id="evalLoading" class="loading hidden">
+            <div class="spinner"></div>
+            <span>Running evaluation...</span>
+        </div>
 
-{% block content %}
-{% from "macros.html" import glass, spinner %}
+        <div id="evalResults" class="hidden">
 
-<div x-data="evalApp()">
-  {% call glass("Evaluation & Comparison Dashboard") %}
-    <p class="text-muted" style="font-size: 0.9rem;">
-      Comprehensive analysis of all recommendation methods and approaches using 6 evaluation metrics.
-      Methods are evaluated one at a time — results appear as they complete.
-    </p>
-    <div class="mt-2">
-      <button class="btn btn-primary" @click="runEvaluation()" :disabled="running">
-        <span x-show="!running">Run Evaluation</span>
-        <span x-show="running">Running...</span>
-      </button>
+            <div class="glass">
+                <h2 class="glass-header">🤝 Collaborative Filtering — Method Comparison</h2>
+                <div style="overflow-x: auto;">
+                    <table class="eval-table" id="cfTable">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>RMSE ↓</th>
+                                <th>MAE ↓</th>
+                                <th>Precision@5 ↑</th>
+                                <th>Recall@5 ↑</th>
+                                <th>F1@5 ↑</th>
+                                <th>Coverage ↑</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cfTableBody">
+                            <tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);">Click "Run Evaluation" to see results</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="bestCfBadge" class="mt-2 hidden">
+                    <span class="badge-best">🏆 Best CF Method: <span id="bestCfName"></span></span>
+                </div>
+
+                <div class="mt-2 chart-container">
+                    <canvas id="cfChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass">
+                <h2 class="glass-header">📈 Approach Comparison (CF vs Content-Based vs Knowledge-Based)</h2>
+                <div style="overflow-x: auto;">
+                    <table class="eval-table" id="approachTable">
+                        <thead>
+                            <tr>
+                                <th>Approach</th>
+                                <th>Precision@5 ↑</th>
+                                <th>Recall@5 ↑</th>
+                            </tr>
+                        </thead>
+                        <tbody id="approachTableBody">
+                            <tr><td colspan="3" style="text-align:center;color:rgba(255,255,255,0.4);">Click "Run Evaluation" to see results</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass" id="analysisSection" class="hidden">
+                <h2 class="glass-header">🔍 Analysis & Insights</h2>
+
+                <div class="analysis-block">
+                    <h4>Which method performs best?</h4>
+                    <p id="analysisBestMethod">Run evaluation to find out.</p>
+                </div>
+
+                <div class="analysis-block mt-2">
+                    <h4>Which approach performs best?</h4>
+                    <p id="analysisBestApproach">Run evaluation to find out.</p>
+                </div>
+
+                <div class="analysis-block mt-2">
+                    <h4>Under what conditions does each perform better?</h4>
+                    <p id="analysisConditions">Run evaluation to find out.</p>
+                </div>
+
+                <div class="analysis-block mt-2">
+                    <h4>Why do differences occur?</h4>
+                    <p id="analysisWhy">Run evaluation to find out.</p>
+                </div>
+            </div>
+
+        </div>
     </div>
 
-    <div x-show="running" x-cloak x-transition class="mt-2">
-      <div class="flex-between gap-sm" style="margin-bottom:0.5rem;">
-        <span class="text-muted" style="font-size:0.85rem;">
-          <span x-text="progressText"></span>
-          <span x-show="subProgress.total > 0" class="text-dim" style="font-size:0.75rem;">
-            — <span x-text="subProgress.current + '/' + subProgress.total"></span>
-          </span>
-        </span>
-        <span class="text-dim" style="font-size:0.8rem;" x-text="progress.current + '/' + progress.total"></span>
-      </div>
-      <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
-        <div style="height:100%;border-radius:2px;background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width 0.4s ease;" :style="{ width: progressPct + '%' }"></div>
-      </div>
-      <div x-show="subProgress.total > 0" class="mt-1" style="height:3px;background:rgba(255,255,255,0.04);border-radius:2px;overflow:hidden;">
-        <div style="height:100%;border-radius:2px;background:var(--primary);transition:width 0.2s ease;" :style="{ width: subPct + '%' }"></div>
-      </div>
-    </div>
-  {% endcall %}
+    <script>
+        let cfChartInstance = null;
 
-  <div x-show="hasResults || running" x-cloak x-transition.duration.400ms>
+        function runEvaluation() {
+            document.getElementById('evalLoading').classList.remove('hidden');
+            document.getElementById('evalResults').classList.add('hidden');
 
-    <div class="kpi-grid" x-show="hasResults" x-cloak>
-      <div class="kpi-card kpi-primary">
-        <div class="kpi-label">Best RMSE</div>
-        <div class="kpi-value"><span x-text="animatedKpis.bestRmse"></span></div>
-        <div class="kpi-unit" x-text="'via ' + methodLabel(bestCfMethod)"></div>
-      </div>
-      <div class="kpi-card kpi-success">
-        <div class="kpi-label">Best Method</div>
-        <div class="kpi-value" style="font-size:1rem;" x-text="methodLabel(bestCfMethod)"></div>
-        <div class="kpi-unit">Lowest RMSE</div>
-      </div>
-      <div class="kpi-card kpi-secondary">
-        <div class="kpi-label">Coverage</div>
-        <div class="kpi-value"><span x-text="animatedKpis.coverage"></span></div>
-        <div class="kpi-unit" x-text="'by ' + methodLabel(bestCfMethod)"></div>
-      </div>
-      <div class="kpi-card kpi-warning">
-        <div class="kpi-label">Best Precision@5</div>
-        <div class="kpi-value"><span x-text="animatedKpis.bestPrecision"></span></div>
-        <div class="kpi-unit" x-text="bestApproach ? bestApproach : '—'"></div>
-      </div>
-    </div>
+            fetch('/api/evaluate')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('evalLoading').classList.add('hidden');
+                document.getElementById('evalResults').classList.remove('hidden');
 
-    {% call glass("Collaborative Filtering — Method Comparison") %}
-      <div class="flex-between mb-2">
-        <span class="text-dim" style="font-size:0.8rem;" x-show="hasResults">
-          Rows appear as each method finishes
-        </span>
-        <button class="btn btn-ghost btn-sm" @click="exportCSV()" x-show="hasResults">Export CSV</button>
-      </div>
-      <div style="overflow-x: auto;">
-        <table class="eval-table">
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>RMSE ↓</th>
-              <th>MAE ↓</th>
-              <th>Precision@5 ↑</th>
-              <th>Recall@5 ↑</th>
-              <th>F1@5 ↑</th>
-              <th>Coverage ↑</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="row in cfData" :key="row.method">
-              <tr :class="{ 'best-row': row.method === bestCfMethod }" x-cloak x-transition>
-                <td>
-                  <strong x-text="methodLabel(row.method)"></strong>
-                  <span x-show="row.method === bestCfMethod" class="badge-best">BEST</span>
-                </td>
-                <td x-text="row.RMSE?.toFixed(4)"></td>
-                <td x-text="row.MAE?.toFixed(4)"></td>
-                <td x-text="row['Precision@5']?.toFixed(4)"></td>
-                <td x-text="row['Recall@5']?.toFixed(4)"></td>
-                <td x-text="row['F1@5']?.toFixed(4)"></td>
-                <td x-text="row.Coverage?.toFixed(4)"></td>
-              </tr>
-            </template>
-            <template x-if="cfData.length === 0 && !running">
-              <tr><td colspan="7" class="text-center text-dim" style="padding:2rem;">Click "Run Evaluation" to start</td></tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="mt-2" x-show="bestCfMethod" x-cloak>
-        <span class="badge-best">Best CF Method: <span x-text="methodLabel(bestCfMethod)"></span></span>
-      </div>
-
-      <div class="mt-2 chart-container" x-show="chartReady" x-cloak>
-        <canvas id="cfChart"></canvas>
-      </div>
-    {% endcall %}
-
-    <div x-show="approachesLoaded" x-cloak x-transition>
-      {% call glass("Approach Comparison (CF vs Content-Based vs Knowledge-Based)") %}
-        <div style="overflow-x: auto;">
-          <table class="eval-table">
-            <thead>
-              <tr>
-                <th>Approach</th>
-                <th>Precision@5 ↑</th>
-                <th>Recall@5 ↑</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="row in approachData" :key="row.approach">
-                <tr :class="{ 'best-row': row.approach === bestApproach }">
-                  <td>
-                    <strong x-text="row.approach"></strong>
-                    <span x-show="row.approach === bestApproach" class="badge-best">BEST</span>
-                  </td>
-                  <td x-text="row['Precision@5']?.toFixed(4) || 'N/A'"></td>
-                  <td x-text="row['Recall@5']?.toFixed(4) || 'N/A'"></td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-        <div class="mt-2 chart-container">
-          <canvas id="approachChart"></canvas>
-        </div>
-      {% endcall %}
-
-      {% call glass("Multi-Method Radar Comparison") %}
-        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
-          Normalized comparison across all metrics for every CF method.
-        </p>
-        <div class="chart-container">
-          <canvas id="radarChart"></canvas>
-        </div>
-      {% endcall %}
-
-      {% call glass("Analysis & Insights") %}
-        <div class="analysis-block">
-          <h4>Which method performs best?</h4>
-          <p x-html="analysis.bestMethod"></p>
-        </div>
-        <div class="analysis-block mt-2">
-          <h4>Which approach performs best?</h4>
-          <p x-html="analysis.bestApproach"></p>
-        </div>
-        <div class="analysis-block mt-2">
-          <h4>Under what conditions does each perform better?</h4>
-          <ul>
-            <li><strong>Dense user data:</strong> Collaborative Filtering (leverages peer patterns)</li>
-            <li><strong>Cold-start user:</strong> Knowledge-Based (no history needed)</li>
-            <li><strong>Cold-start item:</strong> Content-Based (matches item features)</li>
-            <li><strong>Explicit constraints:</strong> Knowledge-Based (precise filtering)</li>
-            <li><strong>Niche categories:</strong> Content-Based (item features override sparsity)</li>
-          </ul>
-        </div>
-        <div class="analysis-block mt-2">
-          <h4>Why do differences occur?</h4>
-          <p>Differences arise from algorithmic biases: CF relies on the collective behavior of users, making it powerful for popular items but weak for new users/items. Content-Based depends on feature representation quality and tends to overspecialize. Knowledge-Based is deterministic and transparent but requires explicit user input and domain rules. The choice depends on data availability, user context, and the specific recommendation goal.</p>
-        </div>
-      {% endcall %}
-    </div>
-
-  </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-  const methodLabels = {
-    user_based: 'User-Based',
-    item_based: 'Item-Based',
-    svd: 'SVD',
-    knn: 'KNN',
-    slope_one: 'Slope One'
-  };
-  const cfMethodNames = ['user_based', 'item_based', 'svd', 'knn', 'slope_one'];
-
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('evalApp', () => ({
-      running: false,
-      hasResults: false,
-      cfData: [],
-      approachData: [],
-      bestCfMethod: null,
-      bestApproach: null,
-      cfChartInstance: null,
-      approachChartInstance: null,
-      radarChartInstance: null,
-      chartReady: false,
-      approachesLoaded: false,
-      analysis: {
-        bestMethod: 'Run evaluation to find out.',
-        bestApproach: 'Run evaluation to find out.'
-      },
-      animatedKpis: { bestRmse: '—', coverage: '—', bestPrecision: '—' },
-      progress: { current: 0, total: 5, label: '' },
-      subProgress: { current: 0, total: 0 },
-
-      get progressText() {
-        if (!this.running) return '';
-        const labels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
-        if (this.progress.current < cfMethodNames.length) {
-          const name = cfMethodNames[this.progress.current];
-          return `Evaluating ${labels[name] || name}...`;
-        }
-        if (this.progress.current === cfMethodNames.length) return 'Comparing approaches...';
-        return 'Done';
-      },
-
-      get progressPct() {
-        if (this.progress.total === 0) return 0;
-        return (this.progress.current / this.progress.total) * 100;
-      },
-
-      get subPct() {
-        if (this.subProgress.total === 0) return 0;
-        return (this.subProgress.current / this.subProgress.total) * 100;
-      },
-
-      methodLabel(id) {
-        return methodLabels[id] || id;
-      },
-
-      async evaluateMethod(method) {
-        const streamMethods = ['svd', 'slope_one'];
-
-        if (streamMethods.includes(method)) {
-          return await this.evaluateWithStream(method);
-        }
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 35000);
-
-        try {
-          const r = await fetch(`/api/evaluate/cf/${method}`, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          const data = await r.json();
-          if (!data.error) {
-            return data;
-          } else {
-            toast(`${methodLabels[method] || method}: ${data.error}`, 'error');
-            return null;
-          }
-        } catch (err) {
-          clearTimeout(timeoutId);
-          if (err.name === 'AbortError') {
-            toast(`${methodLabels[method] || method} timed out (35s limit), skipping`, 'warning');
-          } else {
-            toast(`Error evaluating ${methodLabels[method] || method}: ${err.message}`, 'error');
-          }
-          return null;
-        }
-      },
-
-      async evaluateWithStream(method) {
-        const label = method === 'svd' ? 'epoch' : 'item';
-        this.subProgress = { current: 0, total: 0 };
-
-        try {
-          const r = await fetch(`/api/evaluate/cf/${method}/stream`);
-          const reader = r.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (!line.trim()) continue;
-              try {
-                const msg = JSON.parse(line);
-
-                if (msg.type === 'progress') {
-                  this.subProgress = { current: msg.current, total: msg.total };
-                } else if (msg.type === 'phase') {
-                  this.subProgress = { current: 0, total: 0 };
-                } else if (msg.type === 'result') {
-                  return msg.data;
-                } else if (msg.type === 'error') {
-                  toast(`${methodLabels[method] || method}: ${msg.message}`, 'error');
-                  return null;
+                if (data.error) {
+                    document.getElementById('cfTableBody').innerHTML =
+                        `<tr><td colspan="7" style="text-align:center;color:#FF6584;">Error: ${data.error}</td></tr>`;
+                    return;
                 }
-              } catch (e) {
-                // skip malformed lines
-              }
-            }
-          }
-          return null;
-        } catch (err) {
-          toast(`Error evaluating ${methodLabels[method] || method}: ${err.message}`, 'error');
-          return null;
-        }
-      },
 
-      async runEvaluation() {
-        this.running = true;
-        this.hasResults = true;
-        this.cfData = [];
-        this.bestCfMethod = null;
-        this.chartReady = false;
-        this.approachesLoaded = false;
-        this.progress = { current: 0, total: cfMethodNames.length + 1, label: '' };
-        this.subProgress = { current: 0, total: 0 };
-
-        for (let i = 0; i < cfMethodNames.length; i++) {
-          const method = cfMethodNames[i];
-          this.progress.current = i;
-          this.progress.label = method;
-
-          if (method === 'svd' || method === 'slope_one') {
-            this.subProgress = { current: 0, total: 0 };
-          }
-
-          const result = await this.evaluateMethod(method);
-          if (result) {
-            this.cfData.push(result);
-            if (!this.bestCfMethod || result.RMSE < this.getBestRmse()) {
-              this.bestCfMethod = result.method;
-            }
-          }
+                renderCfTable(data);
+                renderCfChart(data);
+                renderApproachTable(data);
+                renderAnalysis(data);
+            })
+            .catch(err => {
+                document.getElementById('evalLoading').classList.add('hidden');
+                document.getElementById('evalResults').classList.remove('hidden');
+                document.getElementById('cfTableBody').innerHTML =
+                    `<tr><td colspan="7" style="text-align:center;color:#FF6584;">Error: ${err.message}</td></tr>`;
+            });
         }
 
-        this.subProgress = { current: 0, total: 0 };
-        this.progress.current = cfMethodNames.length;
-        this.progress.label = 'approaches';
+        function renderCfTable(data) {
+            const tbody = document.getElementById('cfTableBody');
+            tbody.innerHTML = '';
 
-        await this.$nextTick();
-        this.renderCfChart();
+            if (!data.cf_methods || data.cf_methods.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);">No CF methods evaluated</td></tr>`;
+                return;
+            }
 
-        const best = this.cfData.find(r => r.method === this.bestCfMethod);
-        if (best) {
-          this.animatedKpis.bestRmse = '0.0000';
-          this.animateCounter(this.animatedKpis, 'bestRmse', best.RMSE, 4, 800);
-          this.animatedKpis.coverage = '0.0000';
-          this.animateCounter(this.animatedKpis, 'coverage', best.Coverage, 4, 800);
+            const methodLabels = {
+                user_based: 'User-Based',
+                item_based: 'Item-Based',
+                svd: 'SVD',
+                knn: 'KNN',
+                slope_one: 'Slope One'
+            };
+
+            let bestMethod = null;
+            let bestRmse = Infinity;
+
+            data.cf_methods.forEach(row => {
+                if (row.error) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${row.method}</td><td colspan="6" style="color:#FF6584;">Error: ${row.error}</td>`;
+                    tbody.appendChild(tr);
+                    return;
+                }
+
+                if (row.RMSE < bestRmse) {
+                    bestRmse = row.RMSE;
+                    bestMethod = row.method;
+                }
+
+                const isBest = row.method === data.best_cf_method;
+                const tr = document.createElement('tr');
+                if (isBest) tr.className = 'best-row';
+                tr.innerHTML = `
+                    <td><strong>${methodLabels[row.method] || row.method}</strong> ${isBest ? '<span class="badge-best">BEST</span>' : ''}</td>
+                    <td>${row.RMSE.toFixed(4)}</td>
+                    <td>${row.MAE.toFixed(4)}</td>
+                    <td>${row['Precision@5'].toFixed(4)}</td>
+                    <td>${row['Recall@5'].toFixed(4)}</td>
+                    <td>${row['F1@5'].toFixed(4)}</td>
+                    <td>${row.Coverage.toFixed(4)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (data.best_cf_method) {
+                document.getElementById('bestCfBadge').classList.remove('hidden');
+                document.getElementById('bestCfName').textContent =
+                    (methodLabels[data.best_cf_method] || data.best_cf_method) +
+                    ` (RMSE: ${bestRmse.toFixed(4)})`;
+            }
         }
 
-        try {
-          const r = await fetch('/api/evaluate/approaches');
-          const data = await r.json();
-          if (!data.error) {
-            this.approachData = data.approaches || [];
-            this.bestApproach = data.best_approach;
-            this.approachesLoaded = true;
-            this.analysis.bestMethod = this.buildBestMethodAnalysis();
-            this.analysis.bestApproach = this.buildBestApproachAnalysis(data);
+        function renderCfChart(data) {
+            if (!data.cf_methods || data.cf_methods.length === 0) return;
 
-            await this.$nextTick();
-            this.renderApproachChart(data);
-            this.renderRadarChart(data);
+            const methods = data.cf_methods.filter(r => !r.error);
+            const methodLabels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
 
-            const bestApp = data.approaches?.find(a => a.approach === data.best_approach);
-            if (bestApp) {
-              this.animatedKpis.bestPrecision = '0.0000';
-              this.animateCounter(this.animatedKpis, 'bestPrecision', bestApp['Precision@5'] || 0, 4, 800);
-            }
-            toast('Evaluation complete', 'success');
-          }
-        } catch (err) {
-          toast('Approach comparison error: ' + err.message, 'error');
+            const labels = methods.map(r => methodLabels[r.method] || r.method);
+            const rmseData = methods.map(r => r.RMSE);
+            const maeData = methods.map(r => r.MAE);
+
+            if (cfChartInstance) cfChartInstance.destroy();
+
+            const ctx = document.getElementById('cfChart').getContext('2d');
+            cfChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'RMSE (lower is better)',
+                            data: rmseData,
+                            backgroundColor: 'rgba(108, 99, 255, 0.6)',
+                            borderColor: '#6C63FF',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'MAE (lower is better)',
+                            data: maeData,
+                            backgroundColor: 'rgba(255, 101, 132, 0.6)',
+                            borderColor: '#FF6584',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'rgba(255,255,255,0.7)' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    }
+                }
+            });
         }
 
-        this.running = false;
-        this.chartReady = true;
-      },
+        function renderApproachTable(data) {
+            const tbody = document.getElementById('approachTableBody');
+            tbody.innerHTML = '';
 
-      getBestRmse() {
-        const best = this.cfData.find(r => r.method === this.bestCfMethod);
-        return best ? best.RMSE : Infinity;
-      },
+            if (!data.approaches || data.approaches.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:rgba(255,255,255,0.4);">Approach comparison requires more data. Try running again.</td></tr>`;
+                return;
+            }
 
-      buildBestMethodAnalysis() {
-        const best = this.cfData.find(r => r.method === this.bestCfMethod);
-        if (!best) return 'Run evaluation to find out.';
-
-        const methodExplanations = {
-          user_based: 'simplicity and direct peer comparison — works well when the target user has enough similar neighbors.',
-          item_based: 'direct item-item similarity — effective on dense data where co-rated item pairs are plentiful.',
-          svd: 'latent factor modeling — captures hidden patterns in the user-item matrix, excelling on sparse, large-scale data.',
-          knn: 'nearest-neighbor aggregation — robust to noise, but performance depends on the quality of the neighbor set.',
-          slope_one: 'simplicity and speed of prediction — performs well when rating deviations are consistent across users.',
-        };
-        const why = methodExplanations[this.bestCfMethod] || 'strong performance on this dataset.';
-
-        return `<strong>${methodLabels[this.bestCfMethod] || this.bestCfMethod}</strong> achieves the lowest RMSE (${best.RMSE.toFixed(4)}) among all CF methods. ` +
-               `${methodLabels[this.bestCfMethod] || this.bestCfMethod} excels because of ${why}`;
-      },
-
-      buildBestApproachAnalysis(data) {
-        if (!data.best_approach) return 'Run evaluation to find out.';
-        const bestApp = data.approaches?.find(a => a.approach === data.best_approach);
-        const precVal = bestApp ? bestApp['Precision@5'].toFixed(4) : '—';
-        const second = [...(data.approaches || [])].sort((a, b) => (b['Precision@5'] || 0) - (a['Precision@5'] || 0));
-        const runnerUp = second.length > 1 ? second[1].approach : null;
-
-        const explanations = {
-          'Collaborative Filtering': `strongest when rating data is dense (${this.cfData.length} methods averaged). Works by leveraging peer behavior patterns.`,
-          'Content-Based': `best when item features are informative (${data.approaches?.length || 0} approaches compared). Shines for cold-start items and niche categories where collaborative signals are weak.`,
-          'Knowledge-Based': `ideal for cold-start users with explicit constraints. Deterministic and transparent, but limited by the quality of hand-crafted rules.`,
-        };
-        const why = explanations[data.best_approach] || 'strong performance on this dataset.';
-
-        let text = `<strong>${data.best_approach}</strong> achieves the highest Precision@5 (${precVal}) on this dataset. ` +
-                   `${data.best_approach} performs ${why}`;
-        if (runnerUp) {
-          text += ` <strong>${runnerUp}</strong> follows as the runner-up.`;
+            data.approaches.forEach(row => {
+                if (row.error) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${row.approach}</td><td colspan="2" style="color:#FF6584;">${row.error}</td>`;
+                    tbody.appendChild(tr);
+                    return;
+                }
+                const isBest = data.best_approach && row.approach === data.best_approach;
+                const tr = document.createElement('tr');
+                if (isBest) tr.className = 'best-row';
+                tr.innerHTML = `
+                    <td><strong>${row.approach}</strong> ${isBest ? '<span class="badge-best">BEST</span>' : ''}</td>
+                    <td>${row['Precision@5']?.toFixed(4) || 'N/A'}</td>
+                    <td>${row['Recall@5']?.toFixed(4) || 'N/A'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
         }
-        return text;
-      },
 
-      animateCounter(obj, key, target, decimals = 4, duration = 800) {
-        const start = performance.now();
-        const step = (now) => {
-          const elapsed = now - start;
-          const pct = Math.min(elapsed / duration, 1);
-          const eased = 1 - Math.pow(1 - pct, 3);
-          obj[key] = (target * eased).toFixed(decimals);
-          if (pct < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      },
+        function renderAnalysis(data) {
+            document.getElementById('analysisSection').classList.remove('hidden');
 
-      exportCSV() {
-        if (!this.cfData.length) { toast('No data to export', 'warning'); return; }
-        let csv = 'Method,RMSE,MAE,Precision@5,Recall@5,F1@5,Coverage\n';
-        this.cfData.forEach(r => {
-          csv += `${methodLabels[r.method] || r.method},${r.RMSE},${r.MAE},${r['Precision@5']},${r['Recall@5']},${r['F1@5']},${r.Coverage}\n`;
-        });
-        if (this.approachData.length) {
-          csv += '\nApproach,Precision@5,Recall@5\n';
-          this.approachData.forEach(r => {
-            csv += `${r.approach},${r['Precision@5'] || 'N/A'},${r['Recall@5'] || 'N/A'}\n`;
-          });
+            const methodLabels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
+
+            if (data.best_cf_method) {
+                const best = data.cf_methods.find(r => r.method === data.best_cf_method);
+                const rmseVal = best ? best.RMSE.toFixed(4) : '—';
+                document.getElementById('analysisBestMethod').innerHTML =
+                    `<strong>${methodLabels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE (${rmseVal}) among all CF methods. ` +
+                    `SVD (Matrix Factorization) typically performs best because it captures latent factors in the user-item interaction matrix, ` +
+                    `handling sparsity better than memory-based methods like User-Based or Item-Based CF.`;
+            }
+
+            if (data.best_approach && data.approaches && data.approaches.length > 0) {
+                const best = data.approaches.find(a => a.approach === data.best_approach);
+                const precVal = best ? best['Precision@5'].toFixed(4) : '—';
+                document.getElementById('analysisBestApproach').innerHTML =
+                    `<strong>${data.best_approach}</strong> achieves the highest Precision@5 (${precVal}) on this dataset. ` +
+                    `Collaborative Filtering generally performs best when sufficient rating data exists. ` +
+                    `Content-Based works well for new items but suffers from overspecialization. ` +
+                    `Knowledge-Based excels in cold-start scenarios and when users have explicit constraints.`;
+            } else {
+                document.getElementById('analysisBestApproach').textContent = 'Run evaluation to compare approaches.';
+            }
+
+            document.getElementById('analysisConditions').innerHTML = `
+                <b>• Dense user data:</b> Collaborative Filtering (leverages peer patterns)<br>
+                <b>• Cold-start user:</b> Knowledge-Based (no history needed)<br>
+                <b>• Cold-start item:</b> Content-Based (matches item features)<br>
+                <b>• Explicit constraints:</b> Knowledge-Based (precise filtering)<br>
+                <b>• Niche categories:</b> Content-Based (item features override sparsity)
+            `;
+
+            document.getElementById('analysisWhy').innerHTML =
+                `Differences arise from algorithmic biases: CF relies on the collective behavior of users, ` +
+                `making it powerful for popular items but weak for new users/items. Content-Based depends on ` +
+                `feature representation quality and tends to overspecialize. Knowledge-Based is deterministic ` +
+                `and transparent but requires explicit user input and domain rules. The choice depends on data ` +
+                `availability, user context, and the specific recommendation goal.`;
         }
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'tasteengine_evaluation.csv';
-        a.click(); URL.revokeObjectURL(url);
-        toast('CSV exported', 'success');
-      },
 
-      renderCfChart() {
-        if (this.cfChartInstance) this.cfChartInstance.destroy();
-        if (this.cfData.length === 0) return;
-
-        const labels = this.cfData.map(r => methodLabels[r.method] || r.method);
-        const ctx = document.getElementById('cfChart').getContext('2d');
-
-        this.cfChartInstance = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: labels,
-            datasets: [
-              {
-                label: 'RMSE (lower is better)',
-                data: this.cfData.map(r => r.RMSE),
-                backgroundColor: 'rgba(108, 99, 255, 0.6)',
-                borderColor: '#6C63FF',
-                borderWidth: 1
-              },
-              {
-                label: 'MAE (lower is better)',
-                data: this.cfData.map(r => r.MAE),
-                backgroundColor: 'rgba(255, 101, 132, 0.6)',
-                borderColor: '#FF6584',
-                borderWidth: 1
-              }
-            ]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } },
-            scales: {
-              x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-              y: { beginAtZero: true, ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-            }
-          }
-        });
-      },
-
-      renderApproachChart(data) {
-        if (this.approachChartInstance) this.approachChartInstance.destroy();
-        const approaches = data.approaches || [];
-        if (approaches.length === 0) return;
-
-        const ctx = document.getElementById('approachChart').getContext('2d');
-        this.approachChartInstance = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: approaches.map(r => r.approach),
-            datasets: [
-              { label: 'Precision@5', data: approaches.map(r => r['Precision@5'] || 0), backgroundColor: 'rgba(108, 99, 255, 0.6)', borderColor: '#6C63FF', borderWidth: 1 },
-              { label: 'Recall@5', data: approaches.map(r => r['Recall@5'] || 0), backgroundColor: 'rgba(255, 101, 132, 0.6)', borderColor: '#FF6584', borderWidth: 1 }
-            ]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } },
-            scales: {
-              x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-              y: { beginAtZero: true, ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-            }
-          }
-        });
-      },
-
-      renderRadarChart(data) {
-        if (this.radarChartInstance) this.radarChartInstance.destroy();
-        if (this.cfData.length === 0) return;
-
-        const metrics = ['RMSE', 'MAE', 'Precision@5', 'Recall@5', 'F1@5', 'Coverage'];
-        const colors = ['rgba(108, 99, 255, 0.3)', 'rgba(255, 101, 132, 0.3)', 'rgba(34, 197, 94, 0.3)', 'rgba(245, 158, 11, 0.3)', 'rgba(59, 130, 246, 0.3)'];
-        const borders = ['#6C63FF', '#FF6584', '#22C55E', '#F59E0B', '#3B82F6'];
-
-        const ctx = document.getElementById('radarChart').getContext('2d');
-        this.radarChartInstance = new Chart(ctx, {
-          type: 'radar',
-          data: {
-            labels: metrics,
-            datasets: this.cfData.map((m, i) => ({
-              label: methodLabels[m.method] || m.method,
-              data: metrics.map(metric => {
-                const vals = this.cfData.map(x => x[metric] || 0);
-                const mn = Math.min(...vals);
-                const mx = Math.max(...vals);
-                return mx === mn ? 1 : ((m[metric] || 0) - mn) / (mx - mn);
-              }),
-              backgroundColor: colors[i % colors.length],
-              borderColor: borders[i % borders.length],
-              borderWidth: 2,
-              pointBackgroundColor: borders[i % borders.length]
-            }))
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } },
-            scales: {
-              r: {
-                beginAtZero: true, max: 1,
-                ticks: { color: 'rgba(255,255,255,0.4)', backdropColor: 'transparent' },
-                grid: { color: 'rgba(255,255,255,0.08)' },
-                angleLines: { color: 'rgba(255,255,255,0.08)' },
-                pointLabels: { color: 'rgba(255,255,255,0.7)', font: { size: 11 } }
-              }
-            }
-          }
-        });
-      },
-    }));
-  });
-</script>
-{% endblock %}
+        if (localStorage.getItem('autoEval') === 'true') {
+            localStorage.removeItem('autoEval');
+            runEvaluation();
+        }
+    </script>
+</body>
+</html>

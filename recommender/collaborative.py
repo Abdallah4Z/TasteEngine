@@ -16,9 +16,6 @@ class CollaborativeFiltering:
         self.user_means = np.nanmean(self.user_item_matrix, axis=1)
         self.global_mean = np.nanmean(self.user_item_matrix)
 
-        self._svd_cache = None
-        self._slope_one_dev = None
-
     def _get_user_index(self, user_id):
         indices = np.where(self.user_ids == user_id)[0]
         return indices[0] if len(indices) > 0 else None
@@ -88,9 +85,10 @@ class CollaborativeFiltering:
         predictions.sort(key=lambda x: x[1], reverse=True)
         return predictions[:n_recommendations]
 
-    def train_svd_generator(self, n_factors=20, n_epochs=100, lr=0.01, reg=0.02):
-        if self._svd_cache is not None:
-            return
+    def svd(self, user_id, n_recommendations=10, n_factors=20, n_epochs=15, lr=0.01, reg=0.02):
+        u_idx = self._get_user_index(user_id)
+        if u_idx is None:
+            return []
 
         matrix_imputed = self.user_item_matrix.copy()
         matrix_imputed = np.nan_to_num(matrix_imputed, nan=self.global_mean)
@@ -118,18 +116,6 @@ class CollaborativeFiltering:
                 bi[i] += lr * (err - reg * bi[i])
                 P[u] += lr * (err * Q[i] - reg * P[u])
                 Q[i] += lr * (err * P[u] - reg * Q[i])
-            yield epoch + 1, n_epochs
-
-        self._svd_cache = (P, Q, bu, bi)
-
-    def svd(self, user_id, n_recommendations=10, n_factors=20, n_epochs=100, lr=0.01, reg=0.02):
-        u_idx = self._get_user_index(user_id)
-        if u_idx is None:
-            return []
-
-        for _ in self.train_svd_generator(n_factors, n_epochs, lr, reg):
-            pass
-        P, Q, bu, bi = self._svd_cache
 
         user_ratings = self.user_item_matrix[u_idx]
         unseen = np.where(np.isnan(user_ratings))[0]
@@ -174,40 +160,10 @@ class CollaborativeFiltering:
         predictions.sort(key=lambda x: x[1], reverse=True)
         return predictions[:n_recommendations]
 
-    def compute_slope_one_dev_generator(self):
-        if self._slope_one_dev is not None:
-            return
-
-        dev = np.zeros((self.n_items, self.n_items))
-        cnt = np.zeros((self.n_items, self.n_items), dtype=int)
-
-        for i in range(self.n_items):
-            for j in range(self.n_items):
-                if i == j:
-                    continue
-                diff_sum = 0.0
-                count = 0
-                for u in range(self.n_users):
-                    vi = self.user_item_matrix[u, i]
-                    vj = self.user_item_matrix[u, j]
-                    if not np.isnan(vi) and not np.isnan(vj):
-                        diff_sum += vi - vj
-                        count += 1
-                if count > 0:
-                    dev[i, j] = diff_sum / count
-                    cnt[i, j] = count
-            yield i + 1, self.n_items
-
-        self._slope_one_dev = (dev, cnt)
-
     def slope_one(self, user_id, n_recommendations=10):
         u_idx = self._get_user_index(user_id)
         if u_idx is None:
             return []
-
-        for _ in self.compute_slope_one_dev_generator():
-            pass
-        dev, cnt = self._slope_one_dev
 
         user_ratings = self.user_item_matrix[u_idx]
         unseen = np.where(np.isnan(user_ratings))[0]
@@ -221,8 +177,15 @@ class CollaborativeFiltering:
             numerator = 0.0
             denominator = 0.0
             for j_idx in rated:
-                if cnt[i_idx, j_idx] > 0:
-                    numerator += user_ratings[j_idx] + dev[i_idx, j_idx]
+                dev = 0.0
+                count = 0
+                for u in range(self.n_users):
+                    if not np.isnan(self.user_item_matrix[u, i_idx]) and not np.isnan(self.user_item_matrix[u, j_idx]):
+                        dev += self.user_item_matrix[u, i_idx] - self.user_item_matrix[u, j_idx]
+                        count += 1
+                if count > 0:
+                    avg_dev = dev / count
+                    numerator += (user_ratings[j_idx] + avg_dev)
                     denominator += 1
             if denominator > 0:
                 pred = numerator / denominator

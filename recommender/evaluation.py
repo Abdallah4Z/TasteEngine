@@ -158,4 +158,37 @@ class Evaluator:
         except Exception as e:
             results.append({"approach": "Collaborative Filtering", "error": str(e)})
 
+        def cb_recommender(uid):
+            profile = test_ratings[
+                (test_ratings["user_id"] == uid) & (test_ratings["rating"] >= 3.5)
+            ]["product_id"].tolist()
+            return cb_instance.recommend("tfidf", user_profile_items=profile, n_recommendations=10)
+
+        try:
+            cb_result = self.evaluate_approach("Content-Based", cb_recommender, test_users, products_df, k)
+            results.append(cb_result)
+        except Exception as e:
+            results.append({"approach": "Content-Based", "error": str(e)})
+
+        def kb_recommender(uid):
+            user_row = self.ratings[self.ratings["user_id"] == uid]
+            if user_row.empty:
+                return []
+            prefs = {}
+            prefs["budget_min"] = 0
+            prefs["budget_max"] = 999999
+            prefs["preferred_categories"] = set()
+            prefs["favorite_brands"] = set()
+            constraints = {
+                "budget_min": prefs.get("budget_min", 0),
+                "budget_max": prefs.get("budget_max", 999999),
+            }
+            return kb_instance.recommend("constraint", constraints=constraints, n_recommendations=10)
+
+        try:
+            kb_result = self.evaluate_approach("Knowledge-Based", kb_recommender, test_users, products_df, k)
+            results.append(kb_result)
+        except Exception as e:
+            results.append({"approach": "Knowledge-Based", "error": str(e)})
+
         return results

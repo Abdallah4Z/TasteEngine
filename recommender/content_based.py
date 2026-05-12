@@ -60,8 +60,6 @@ class ContentBasedRecommender:
                 score += 30
             if budget_min <= product["price"] <= budget_max:
                 score += 20
-            if product["subcategory"] in [s for c in preferred_cats for s in [] if c == product["category"]]:
-                score += 10
             scores.append((int(product["product_id"]), score))
 
         scores.sort(key=lambda x: x[1], reverse=True)

@@ -1,251 +1,134 @@
-{% extends "base.html" %}
-{% block title %}TasteEngine — Home{% endblock %}
-
-{% block content %}
-{% from "macros.html" import glass, tag %}
-
-{% call glass("Welcome to TasteEngine") %}
-  <p class="text-muted" style="font-size: 0.9rem;">
-    An intelligent multi-approach recommender system. Compare Collaborative Filtering,
-    Content-Based, and Knowledge-Based recommendations side by side.
-  </p>
-{% endcall %}
-
-<div x-data="homeApp()" class="row">
-  {% call glass("Select a User") %}
-    <div class="form-group">
-      <label class="form-label" for="userSelect">User</label>
-      <select id="userSelect" x-model="selectedUserId" @change="onUserChange">
-        <option value="">-- Choose a user --</option>
-        {% for u in users %}
-        <option value="{{ u.id }}">{{ u.name }} (Age: {{ u.age }})</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="profile-card mt-2" x-show="selectedUser" x-cloak x-transition>
-      <div class="profile-avatar" x-text="selectedUser?.name?.charAt(0) || '?'"></div>
-      <div class="profile-info">
-        <div class="profile-name" x-text="selectedUser?.name"></div>
-        <div class="profile-detail" x-text="'Age: ' + selectedUser?.age"></div>
-        <div class="profile-detail" x-text="'Budget: $' + selectedUser?.budget_min?.toFixed(2) + ' - $' + selectedUser?.budget_max?.toFixed(2)"></div>
-        <div class="profile-tags mt-1">
-          <template x-for="cat in (selectedUser?.categories || [])" :key="cat">
-            <span class="tag" x-text="cat"></span>
-          </template>
-          <template x-for="b in (selectedUser?.brands || [])" :key="b">
-            <span class="tag tag-brand" x-text="b"></span>
-          </template>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TasteEngine — Recommender System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">Taste<span>Engine</span></a>
+        <div class="nav-links">
+            <a href="/" class="active">Home</a>
+            <a href="/recommend">Recommend</a>
+            <a href="/evaluate">Evaluate</a>
         </div>
-      </div>
-    </div>
+    </nav>
 
-    <div x-show="selectedUser" x-cloak x-transition class="mt-2">
-      <button class="btn btn-secondary btn-sm" @click="showEditor = !showEditor">
-        <span x-text="showEditor ? 'Hide Preferences' : 'Edit Preferences'"></span>
-      </button>
-    </div>
-
-    <div x-show="showEditor && selectedUser" x-cloak x-transition class="mt-2">
-      <div class="glass" style="margin-bottom:0;padding:1rem;">
-        <h3 style="font-size:0.9rem;color:var(--text-primary);margin-bottom:0.75rem;">Budget Preferences</h3>
-        <div class="preference-slider">
-          <label>Min Budget</label>
-          <input type="range" :min="0" :max="selectedUser?.budget_max || 100" x-model.number="editBudgetMin">
-          <span class="slider-value" x-text="'$' + editBudgetMin"></span>
+    <div class="container">
+        <div class="glass">
+            <h1 class="glass-header">Welcome to TasteEngine</h1>
+            <p class="hero-text">An intelligent multi-approach recommender system. Compare Collaborative Filtering, Content-Based, and Knowledge-Based recommendations side by side.</p>
         </div>
-        <div class="preference-slider">
-          <label>Max Budget</label>
-          <input type="range" :min="editBudgetMin" :max="500" x-model.number="editBudgetMax">
-          <span class="slider-value" x-text="'$' + editBudgetMax"></span>
+
+        <div class="row">
+            <div class="glass" id="userSelectPanel">
+                <h2 class="glass-header">Select a User</h2>
+                <div class="form-group">
+                    <label class="form-label">User</label>
+                    <select id="userSelect">
+                        <option value="">-- Choose a user --</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.name }} (Age: {{ u.age }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="profileCard" class="profile-card mt-2 hidden">
+                    <div class="profile-avatar" id="profileAvatar">A</div>
+                    <div class="profile-info">
+                        <div class="profile-name" id="profileName">Alice</div>
+                        <div class="profile-detail" id="profileDetail">Age: 28</div>
+                        <div class="profile-detail">Budget: $<span id="profileBudgetMin">0</span> - $<span id="profileBudgetMax">0</span></div>
+                        <div class="profile-tags mt-1" id="profileTags"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass">
+                <h2 class="glass-header">Quick Actions</h2>
+                <div class="action-card">
+                    <p>Get started by selecting a user above, then:</p>
+                    <a href="/recommend" class="btn btn-primary" style="display: inline-block; text-decoration: none;">🔍 Get Recommendations</a>
+                    <br><br>
+                    <a href="/evaluate" class="btn btn-secondary" style="display: inline-block; text-decoration: none;">📊 View Evaluation</a>
+                </div>
+            </div>
         </div>
-        <button class="btn btn-primary btn-sm mt-2" @click="savePreferences()" :disabled="savingPrefs">
-          <span x-show="!savingPrefs">Save Preferences</span>
-          <span x-show="savingPrefs">Saving...</span>
-        </button>
-      </div>
-    </div>
 
-    <div class="mt-2" x-cloak>
-      <button class="btn btn-secondary btn-sm" @click="showCreator = !showCreator">
-        <span x-text="showCreator ? 'Cancel' : '+ Create New User'"></span>
-      </button>
-    </div>
-
-    <div x-show="showCreator" x-cloak x-transition class="mt-2">
-      <div class="glass" style="margin-bottom:0;padding:1rem;">
-        <h3 style="font-size:0.9rem;color:var(--text-primary);margin-bottom:0.75rem;">New User</h3>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Name</label>
-            <input type="text" x-model="newName" placeholder="e.g. John">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Age</label>
-            <input type="number" x-model.number="newAge" min="1" max="120" value="25">
-          </div>
+        <div class="glass">
+            <h2 class="glass-header">Available Approaches</h2>
+            <div class="approach-grid">
+                <div class="approach-card">
+                    <span class="icon">🤝</span>
+                    <h3>Collaborative Filtering</h3>
+                    <p>5 methods: User, Item, SVD, KNN, Slope One</p>
+                </div>
+                <div class="approach-card">
+                    <span class="icon">🏷️</span>
+                    <h3>Content-Based</h3>
+                    <p>TF-IDF + Cosine Similarity, Feature Matching</p>
+                </div>
+                <div class="approach-card">
+                    <span class="icon">⚙️</span>
+                    <h3>Knowledge-Based</h3>
+                    <p>Constraint, Rule, Utility-based filtering</p>
+                </div>
+            </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Min Budget</label>
-            <input type="number" x-model.number="newBudgetMin" min="0" value="0">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Max Budget</label>
-            <input type="number" x-model.number="newBudgetMax" min="0" value="500">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Preferred Categories</label>
-          <select multiple x-model="newCategories" style="min-height:80px;">
-            {% for cat in categories %}
-            <option value="{{ cat }}">{{ cat }}</option>
-            {% endfor %}
-          </select>
-          <span class="form-hint">Ctrl+click to select multiple</span>
-        </div>
-        <button class="btn btn-primary btn-sm mt-2" @click="createUser()" :disabled="creatingUser">
-          <span x-show="!creatingUser">Create User</span>
-          <span x-show="creatingUser">Creating...</span>
-        </button>
-      </div>
     </div>
-  {% endcall %}
 
-  {% call glass("Quick Actions") %}
-    <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
-      Get started by selecting a user above, then:
-    </p>
-    <a href="/recommend" class="btn btn-primary" style="display: inline-flex; text-decoration: none; margin-bottom: 0.5rem;">Get Recommendations</a>
-    <br>
-    <a href="/evaluate" class="btn btn-secondary" style="display: inline-flex; text-decoration: none;">View Evaluation</a>
-  {% endcall %}
-</div>
+    <script>
+        const userData = {{ users | tojson | safe }};
 
-{% call glass("Available Approaches") %}
-  <div class="row" style="grid-template-columns: 1fr 1fr 1fr;">
-    <div class="text-center" style="padding: 1rem;">
-      <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤝</div>
-      <h3 style="color: var(--text-primary); font-size: 1rem; margin-bottom: 0.3rem;">Collaborative Filtering</h3>
-      <p class="text-dim" style="font-size: 0.8rem;">5 methods: User, Item, SVD, KNN, Slope One</p>
-    </div>
-    <div class="text-center" style="padding: 1rem;">
-      <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🏷️</div>
-      <h3 style="color: var(--text-primary); font-size: 1rem; margin-bottom: 0.3rem;">Content-Based</h3>
-      <p class="text-dim" style="font-size: 0.8rem;">TF-IDF + Cosine Similarity, Feature Matching</p>
-    </div>
-    <div class="text-center" style="padding: 1rem;">
-      <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚙️</div>
-      <h3 style="color: var(--text-primary); font-size: 1rem; margin-bottom: 0.3rem;">Knowledge-Based</h3>
-      <p class="text-dim" style="font-size: 0.8rem;">Constraint, Rule, Utility-based filtering</p>
-    </div>
-  </div>
-{% endcall %}
-{% endblock %}
+        document.getElementById('userSelect').addEventListener('change', function() {
+            const uid = parseInt(this.value);
+            if (!uid) {
+                document.getElementById('profileCard').classList.add('hidden');
+                return;
+            }
+            const user = userData.find(u => u.id === uid);
+            if (!user) return;
 
-{% block scripts %}
-<script>
-  const userData = {{ users | tojson | safe }};
+            document.getElementById('profileCard').classList.remove('hidden');
+            document.getElementById('profileAvatar').textContent = user.name.charAt(0);
+            document.getElementById('profileName').textContent = user.name;
+            document.getElementById('profileDetail').textContent = `Age: ${user.age}`;
+            document.getElementById('profileBudgetMin').textContent = user.budget_min.toFixed(2);
+            document.getElementById('profileBudgetMax').textContent = user.budget_max.toFixed(2);
 
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('homeApp', () => ({
-      selectedUserId: localStorage.getItem('selectedUser') || null,
-      selectedUser: null,
-      showEditor: false,
-      editBudgetMin: 0,
-      editBudgetMax: 100,
-      savingPrefs: false,
-      showCreator: false,
-      newName: '',
-      newAge: 25,
-      newBudgetMin: 0,
-      newBudgetMax: 500,
-      newCategories: [],
-      creatingUser: false,
+            const tagsContainer = document.getElementById('profileTags');
+            tagsContainer.innerHTML = '';
+            user.categories.forEach(cat => {
+                if (cat) {
+                    const tag = document.createElement('span');
+                    tag.className = 'tag';
+                    tag.textContent = cat;
+                    tagsContainer.appendChild(tag);
+                }
+            });
+            user.brands.forEach(b => {
+                if (b) {
+                    const tag = document.createElement('span');
+                    tag.className = 'tag';
+                    tag.style.borderColor = 'rgba(255,101,132,0.3)';
+                    tag.style.background = 'rgba(255,101,132,0.15)';
+                    tag.style.color = '#ff9eb2';
+                    tag.textContent = b;
+                    tagsContainer.appendChild(tag);
+                }
+            });
 
-      init() {
-        if (this.selectedUserId) {
-          this.selectedUserId = parseInt(this.selectedUserId);
-          this.onUserChange();
+            localStorage.setItem('selectedUser', uid);
+        });
+
+        const savedUser = localStorage.getItem('selectedUser');
+        if (savedUser) {
+            document.getElementById('userSelect').value = savedUser;
+            document.getElementById('userSelect').dispatchEvent(new Event('change'));
         }
-      },
-
-      onUserChange() {
-        const uid = this.selectedUserId ? parseInt(this.selectedUserId) : null;
-        if (!uid) {
-          this.selectedUser = null;
-          return;
-        }
-        this.selectedUser = userData.find(u => u.id === uid);
-        if (this.selectedUser) {
-          this.editBudgetMin = this.selectedUser.budget_min;
-          this.editBudgetMax = this.selectedUser.budget_max;
-        }
-        localStorage.setItem('selectedUser', uid);
-      },
-
-      async savePreferences() {
-        if (!this.selectedUser) return;
-        this.savingPrefs = true;
-        try {
-          const r = await fetch(`/api/user/${this.selectedUser.id}/preferences`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              budget_min: this.editBudgetMin,
-              budget_max: this.editBudgetMax
-            })
-          });
-          const data = await r.json();
-          if (data.success) {
-            this.selectedUser.budget_min = this.editBudgetMin;
-            this.selectedUser.budget_max = this.editBudgetMax;
-            toast('Preferences saved!', 'success');
-            this.showEditor = false;
-          }
-        } catch (err) {
-          toast('Error saving preferences', 'error');
-        } finally {
-          this.savingPrefs = false;
-        }
-      },
-
-      async createUser() {
-        if (!this.newName.trim()) { toast('Please enter a name', 'warning'); return; }
-        this.creatingUser = true;
-        try {
-          const r = await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: this.newName.trim(),
-              age: this.newAge,
-              categories: this.newCategories,
-              budget_min: this.newBudgetMin,
-              budget_max: this.newBudgetMax,
-            })
-          });
-          const data = await r.json();
-          if (data.success) {
-            toast(`User "${data.name}" created!`, 'success');
-            this.showCreator = false;
-            this.newName = '';
-            this.newAge = 25;
-            this.newCategories = [];
-            const newUser = { id: data.user_id, name: data.name, age: this.newAge,
-              categories: this.newCategories, brands: [],
-              budget_min: this.newBudgetMin, budget_max: this.newBudgetMax };
-            userData.push(newUser);
-            this.selectedUserId = data.user_id;
-            this.selectedUser = newUser;
-            this.onUserChange();
-          }
-        } catch (err) {
-          toast('Error creating user: ' + err.message, 'error');
-        } finally {
-          this.creatingUser = false;
-        }
-      }
-    }));
-  });
-</script>
-{% endblock %}
+    </script>
+</body>
+</html>
