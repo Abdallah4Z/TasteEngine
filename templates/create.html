@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TasteEngine — Create User</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">Taste<span>Engine</span></a>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/recommend">Recommend</a>
+            <a href="/evaluate">Evaluate</a>
+            <a href="/create" class="active">+ User</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="step1" class="glass">
+            <h2 class="glass-header">Create New User</h2>
+            <p class="hero-text">Set up their profile and preferences. They'll rate a few products next.</p>
+
+            <div class="form-group">
+                <label class="form-label">Name</label>
+                <input type="text" id="userName" value="" placeholder="e.g. John">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Age</label>
+                <input type="number" id="userAge" value="25" min="1" max="120" style="max-width:120px">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Preferred Categories</label>
+                <div class="btn-group" id="catGroup">
+                    {% for cat in categories %}
+                    <button class="btn-method" data-value="{{ cat }}" onclick="toggleCat(this)">{{ cat }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Favorite Brands</label>
+                <div class="btn-group" id="brandGroup" style="max-height:160px;overflow-y:auto;">
+                    {% for b in brands %}
+                    <button class="btn-method" data-value="{{ b }}" onclick="toggleBrand(this)">{{ b }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="row">
+                <div class="form-group">
+                    <label class="form-label">Budget Min ($)</label>
+                    <input type="number" id="budgetMin" value="10" min="0" step="0.01" style="max-width:160px">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Budget Max ($)</label>
+                    <input type="number" id="budgetMax" value="1000" min="0" step="0.01" style="max-width:160px">
+                </div>
+            </div>
+
+            <div class="mt-2">
+                <button class="btn btn-primary" onclick="goStep2()">Next — Rate Products →</button>
+            </div>
+        </div>
+
+        <div id="step2" class="hidden">
+            <div class="glass">
+                <h2 class="glass-header">Rate Some Products</h2>
+                <p class="hero-text">Rate these products so the system learns your taste. More ratings = better recommendations.</p>
+                <div id="ratingGrid" class="product-grid mt-2"></div>
+                <div class="mt-2" id="step2Actions" style="display:none;">
+                    <button class="btn btn-primary" onclick="submitAll()">✅ Create User & Generate Recommendations</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="loadingIndicator" class="loading hidden">
+            <div class="spinner"></div>
+            <span>Creating user and generating ratings...</span>
+        </div>
+
+        <div id="doneCard" class="glass hidden">
+            <h2 class="glass-header">✅ User Created!</h2>
+            <p class="hero-text" id="doneText"></p>
+            <div class="mt-2">
+                <a id="recLink" href="/recommend" class="btn btn-primary" style="display:inline-block;text-decoration:none;">🔍 Get Recommendations</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedCats = [];
+        let selectedBrands = [];
+        let newUserId = null;
+        let ratingData = [];
+
+        function toggleCat(el) {
+            const v = el.dataset.value;
+            el.classList.toggle('active');
+            if (selectedCats.includes(v)) selectedCats = selectedCats.filter(c => c !== v);
+            else selectedCats.push(v);
+        }
+
+        function toggleBrand(el) {
+            const v = el.dataset.value;
+            el.classList.toggle('active');
+            if (selectedBrands.includes(v)) selectedBrands = selectedBrands.filter(b => b !== v);
+            else selectedBrands.push(v);
+        }
+
+        function goStep2() {
+            const name = document.getElementById('userName').value.trim();
+            if (!name) { alert('Enter a name.'); return; }
+            if (selectedCats.length === 0) { alert('Select at least one category.'); return; }
+
+            const age = parseInt(document.getElementById('userAge').value) || 25;
+            const bmin = parseFloat(document.getElementById('budgetMin').value) || 0;
+            const bmax = parseFloat(document.getElementById('budgetMax').value) || 1000;
+
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+
+            fetch('/api/create/step1', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name, age, categories: selectedCats, brands: selectedBrands,
+                    budget_min: bmin, budget_max: bmax,
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                if (data.error) { alert(data.error); return; }
+                newUserId = data.user_id;
+                document.getElementById('step1').classList.add('hidden');
+                document.getElementById('step2').classList.remove('hidden');
+
+                const grid = document.getElementById('ratingGrid');
+                grid.innerHTML = '';
+                ratingData = [];
+
+                const allProducts = {{ products | tojson | safe }};
+                const catProducts = allProducts.filter(p => selectedCats.includes(p.category));
+                const pool = catProducts.length >= 5 ? catProducts : allProducts;
+                const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, 5);
+
+                shuffled.forEach((p, i) => {
+                    ratingData.push({product_id: p.product_id, rating: 3});
+                    const card = document.createElement('div');
+                    card.className = 'product-card';
+                    card.innerHTML = `
+                        <div style="font-size:0.75rem;color:rgba(255,255,255,0.35);margin-bottom:0.3rem;">Product ${i+1} of 5</div>
+                        <div class="product-name">${p.name}</div>
+                        <div class="product-meta">${p.brand} · ${p.subcategory} · $${p.price.toFixed(2)}</div>
+                        <div class="form-group" style="margin-top:0.5rem;">
+                            <label class="form-label">Your Rating</label>
+                            <div class="star-rating" data-index="${i}">
+                                ${[1,2,3,4,5].map(s => `<span class="star" onclick="setRating(${i}, ${s})">${s <= 3 ? '★' : '☆'}</span>`).join('')}
+                                <span class="rating-value" style="margin-left:0.5rem;color:rgba(255,255,255,0.5);font-size:0.85rem;">3 / 5</span>
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                document.getElementById('step2Actions').style.display = 'block';
+            })
+            .catch(err => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                alert('Error: ' + err.message);
+            });
+        }
+
+        function setRating(index, val) {
+            ratingData[index].rating = val;
+            const container = document.querySelectorAll('.star-rating')[index];
+            const stars = container.querySelectorAll('.star');
+            stars.forEach((s, i) => {
+                s.textContent = i < val ? '★' : '☆';
+                s.style.color = i < val ? '#FFD700' : 'rgba(255,255,255,0.2)';
+            });
+            container.querySelector('.rating-value').textContent = val + ' / 5';
+        }
+
+        function submitAll() {
+            const incomplete = ratingData.some(r => !r.rating);
+            if (incomplete) { alert('Rate all 5 products first.'); return; }
+
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+
+            fetch('/api/create/step1', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: document.getElementById('userName').value.trim(),
+                    age: parseInt(document.getElementById('userAge').value) || 25,
+                    categories: selectedCats,
+                    brands: selectedBrands,
+                    budget_min: parseFloat(document.getElementById('budgetMin').value) || 0,
+                    budget_max: parseFloat(document.getElementById('budgetMax').value) || 1000,
+                    ratings: ratingData,
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                if (data.error) { alert(data.error); return; }
+                newUserId = data.user_id;
+                document.getElementById('step2').classList.add('hidden');
+                document.getElementById('doneCard').classList.remove('hidden');
+                document.getElementById('doneText').textContent =
+                    `${data.name} (ID: ${data.user_id}) created with ratings. Try recommendations now!`;
+                document.getElementById('recLink').href = '/recommend';
+                localStorage.setItem('selectedUser', data.user_id);
+            })
+            .catch(err => {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                alert('Error: ' + err.message);
+            });
+        }
+    </script>
+
+    <style>
+        .star-rating { display: flex; align-items: center; gap: 0.25rem; }
+        .star { font-size: 1.5rem; cursor: pointer; color: rgba(255,255,255,0.2); transition: color 0.15s, transform 0.15s; }
+        .star:hover { transform: scale(1.2); }
+    </style>
+</body>
+</html>

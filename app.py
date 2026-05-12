@@ -6,7 +6,7 @@ import json as json_module
 import numpy as np
 import pandas as pd
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
-from utils.helpers import load_data, get_user_preferences
+from utils.helpers import load_data, get_user_preferences, DATA_DIR
 from recommender.collaborative import CollaborativeFiltering
 from recommender.content_based import ContentBasedRecommender
 from recommender.knowledge_based import KnowledgeBasedRecommender
@@ -399,6 +399,7 @@ def api_create_user():
         "budget_max": float(data.get("budget_max", 500)),
     }])
     users = pd.concat([users, new_row], ignore_index=True)
+    users.to_csv(os.path.join(DATA_DIR, "users.csv"), index=False)
     USER_OPTIONS.append({
         "id": new_id,
         "name": new_name,
@@ -409,6 +410,105 @@ def api_create_user():
         "budget_max": float(data.get("budget_max", 500)),
     })
     return jsonify({"success": True, "user_id": new_id, "name": new_name})
+
+
+@app.route("/create")
+def create_user_page():
+    return render_template("create.html",
+                           categories=CATEGORIES,
+                           brands=BRANDS,
+                           products=products.to_dict("records"))
+
+
+@app.route("/api/create/step1", methods=["POST"])
+def api_create_step1():
+    global users
+    data = request.json
+    new_id = int(users["user_id"].max() + 1)
+    new_name = data.get("name", f"User_{new_id}")
+    user_cats = data.get("categories", [])
+    user_brands = data.get("brands", [])
+    budget_min = float(data.get("budget_min", 0))
+    budget_max = float(data.get("budget_max", 500))
+
+    new_row = pd.DataFrame([{
+        "user_id": new_id,
+        "name": new_name,
+        "age": int(data.get("age", 25)),
+        "preferred_categories": ",".join(user_cats),
+        "favorite_brands": ",".join(user_brands),
+        "budget_min": budget_min,
+        "budget_max": budget_max,
+    }])
+    users = pd.concat([users, new_row], ignore_index=True)
+    USER_OPTIONS.append({
+        "id": new_id, "name": new_name, "age": int(data.get("age", 25)),
+        "categories": user_cats, "brands": user_brands,
+        "budget_min": budget_min, "budget_max": budget_max,
+    })
+
+    rated_products = data.get("ratings", [])
+    if rated_products:
+        _save_and_generate_ratings(new_id, user_cats, user_brands, budget_min, budget_max, rated_products)
+
+    users.to_csv(os.path.join(DATA_DIR, "users.csv"), index=False)
+    return jsonify({"success": True, "user_id": new_id, "name": new_name})
+
+
+def _save_and_generate_ratings(user_id, user_cats, user_brands, budget_min, budget_max, manual_ratings):
+    global ratings
+    seed_ids = [r["product_id"] for r in manual_ratings]
+    seed_ratings = {r["product_id"]: r["rating"] for r in manual_ratings}
+
+    manual_rows = []
+    for r in manual_ratings:
+        manual_rows.append({"user_id": user_id, "product_id": r["product_id"], "rating": r["rating"]})
+    manual_df = pd.DataFrame(manual_rows)
+
+    rated_ids = set(seed_ids)
+    all_ids = products["product_id"].tolist()
+    unrated = [pid for pid in all_ids if pid not in rated_ids]
+    np.random.seed(user_id)
+
+    target = min(40, len(all_ids))
+    needed = target - len(manual_rows)
+    if needed <= 0:
+        ratings = pd.concat([ratings, manual_df], ignore_index=True)
+        return
+
+    chosen = np.random.choice(unrated, min(needed, len(unrated)), replace=False)
+    prod_cat = dict(zip(products["product_id"], products["category"]))
+    prod_brand = dict(zip(products["product_id"], products["brand"]))
+    prod_price = dict(zip(products["product_id"], products["price"]))
+    cat_set = set(user_cats)
+    brand_set = set(user_brands)
+    seed_values = np.array(list(seed_ratings.values()))
+    seed_mean = np.mean(seed_values) if len(seed_values) > 0 else 3.0
+
+    new_ratings_rows = []
+    for pid in chosen:
+        base = 3.0
+        cat = prod_cat.get(pid, "")
+        if cat in cat_set:
+            base += np.random.uniform(0.5, 1.5)
+        brand = prod_brand.get(pid, "")
+        if brand in brand_set:
+            base += np.random.uniform(0.3, 1.0)
+        price = prod_price.get(pid, 50)
+        if budget_min <= price <= budget_max:
+            base += np.random.uniform(0.0, 0.5)
+        else:
+            base -= np.random.uniform(0.0, 0.5)
+        similarity_boost = np.random.uniform(-0.3, 0.5)
+        base += similarity_boost
+        noise = np.random.normal(0, 0.5)
+        rating = round(min(5.0, max(1.0, base + noise)), 1)
+        new_ratings_rows.append({"user_id": user_id, "product_id": int(pid), "rating": rating})
+
+    auto_df = pd.DataFrame(new_ratings_rows)
+    combined = pd.concat([manual_df, auto_df], ignore_index=True)
+    ratings = pd.concat([ratings, combined], ignore_index=True)
+    ratings.to_csv(os.path.join(DATA_DIR, "ratings.csv"), index=False)
 
 
 @app.route("/htmx/recommend", methods=["POST"])
