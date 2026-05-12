@@ -27,11 +27,11 @@ def get_user_preferences(users_df, user_id):
         "preferred_categories": set(
             user["preferred_categories"].split(",")
         ) if isinstance(user["preferred_categories"], str) else set(),
-        "budget_min": user["budget_min"],
-        "budget_max": user["budget_max"],
+        "budget_min": float(user["budget_min"]),
+        "budget_max": float(user["budget_max"]),
         "favorite_brands": set(
             user["favorite_brands"].split(",")
         ) if isinstance(user["favorite_brands"], str) else set(),
-        "name": user["name"],
-        "age": user["age"],
+        "name": str(user["name"]),
+        "age": int(user["age"]),
     }

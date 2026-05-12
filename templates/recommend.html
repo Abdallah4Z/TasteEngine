@@ -91,9 +91,20 @@
           <div x-show="!results && loading" x-transition>
             {{ skeleton_cards(6) }}
           </div>
-          <div x-show="results && results.length === 0" x-transition>
+          <div x-show="results && results.length === 0 && !coldStartDetected" x-transition>
             {% from "macros.html" import empty_state %}
             {{ empty_state('📭', 'No recommendations', 'Try a different approach or method.') }}
+          </div>
+          <div x-show="results && results.length === 0 && coldStartDetected" x-transition>
+            <div class="empty-state">
+              <div class="empty-icon">👤</div>
+              <div class="empty-title">This user has no ratings yet</div>
+              <div class="empty-desc" style="margin-bottom:1rem;">
+                Collaborative Filtering and Content-Based need rating history. Switch to
+                <strong>Knowledge-Based</strong> which works with preferences alone.
+              </div>
+              <button class="btn btn-primary btn-sm" @click="switchToKnowledge()">Switch to Knowledge-Based</button>
+            </div>
           </div>
 
           <div class="filter-bar" x-show="results && results.length > 0" x-cloak>
@@ -225,7 +236,7 @@
       activeTab: 'cards',
       nRecs: 10,
       showResults: false,
-      filterCategory: '',
+      coldStartDetected: false,
       filterBrand: '',
       filterPriceMax: null,
 
@@ -277,6 +288,12 @@
         window.history.replaceState({}, '', url);
       },
 
+      switchToKnowledge() {
+        this.selectApproach('knowledge');
+        this.coldStartDetected = false;
+        this.getRecommendations();
+      },
+
       onUserChange() {
         const uid = this.selectedUserId;
         if (!uid) {
@@ -287,7 +304,7 @@
         localStorage.setItem('selectedUser', uid);
         this.results = null;
         this.compareResults = null;
-        this.updateUrl();
+        this.coldStartDetected = false;
       },
 
       selectApproach(key) {
@@ -298,6 +315,7 @@
         }
         this.results = null;
         this.compareResults = null;
+        this.coldStartDetected = false;
         this.updateUrl();
       },
 
@@ -340,7 +358,14 @@
           this.updateUrl();
 
           if (this.results.length > 0) {
+            this.coldStartDetected = false;
             toast(`Found ${this.results.length} recommendations`, 'success');
+          } else {
+            this.coldStartDetected = this.selectedUser &&
+              (this.currentApproach === 'cf' || this.currentApproach === 'content');
+            if (this.coldStartDetected) {
+              toast(`No ratings for this user — try Knowledge-Based`, 'warning', 5000);
+            }
           }
         } catch (err) {
           toast('Error: ' + err.message, 'error');

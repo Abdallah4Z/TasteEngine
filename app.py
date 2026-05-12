@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import json as json_module
 import numpy as np
+import pandas as pd
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from utils.helpers import load_data, get_user_preferences
 from recommender.collaborative import CollaborativeFiltering
@@ -374,7 +375,40 @@ def api_update_preferences(user_id):
             u["budget_min"] = float(prefs.get("budget_min", 0))
             u["budget_max"] = float(prefs.get("budget_max", 999999))
             break
-    return jsonify({"success": True, "preferences": prefs})
+    return jsonify({"success": True, "preferences": {
+        "budget_min": prefs.get("budget_min", 0),
+        "budget_max": prefs.get("budget_max", 0),
+        "name": prefs.get("name", ""),
+        "age": prefs.get("age", 0),
+    }})
+
+
+@app.route("/api/users", methods=["POST"])
+def api_create_user():
+    global users
+    data = request.json
+    new_id = int(users["user_id"].max() + 1)
+    new_name = data.get("name", f"User_{new_id}")
+    new_row = pd.DataFrame([{
+        "user_id": new_id,
+        "name": new_name,
+        "age": int(data.get("age", 25)),
+        "preferred_categories": ",".join(data.get("categories", [])),
+        "favorite_brands": ",".join(data.get("brands", [])),
+        "budget_min": float(data.get("budget_min", 0)),
+        "budget_max": float(data.get("budget_max", 500)),
+    }])
+    users = pd.concat([users, new_row], ignore_index=True)
+    USER_OPTIONS.append({
+        "id": new_id,
+        "name": new_name,
+        "age": int(data.get("age", 25)),
+        "categories": data.get("categories", []),
+        "brands": data.get("brands", []),
+        "budget_min": float(data.get("budget_min", 0)),
+        "budget_max": float(data.get("budget_max", 500)),
+    })
+    return jsonify({"success": True, "user_id": new_id, "name": new_name})
 
 
 @app.route("/htmx/recommend", methods=["POST"])

@@ -75,13 +75,12 @@ class Explainer:
     def explain_knowledge(self, method, user_id, product_id, details=None):
         product = self._get_product(product_id)
         user = self._get_user(user_id)
+        details = details or {}
         pname = product.get("name", f"Item #{product_id}")
         cat = product.get("category", "")
         brand = product.get("brand", "")
         price = product.get("price", 0)
         budget_max = details.get("budget_max", 0)
-        details = details or {}
-        pref_brands = self._pref_list(user, "favorite_brands")
 
         templates = {
             "constraint": f"Fits your criteria: ${price:.0f} within budget · {cat} · {brand}" if brand else f"Fits your criteria: ${price:.0f} within budget · {cat}",
