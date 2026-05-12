@@ -85,7 +85,7 @@ class CollaborativeFiltering:
         predictions.sort(key=lambda x: x[1], reverse=True)
         return predictions[:n_recommendations]
 
-    def svd(self, user_id, n_recommendations=10, n_factors=20, n_epochs=20, lr=0.005, reg=0.02):
+    def svd(self, user_id, n_recommendations=10, n_factors=20, n_epochs=100, lr=0.01, reg=0.02):
         u_idx = self._get_user_index(user_id)
         if u_idx is None:
             return []

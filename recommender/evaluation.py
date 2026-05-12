@@ -149,7 +149,7 @@ class Evaluator:
         test_users = test_ratings["user_id"].unique()[:20]
 
         def cf_recommender(uid):
-            return cf_instance.recommend("svd", uid, n_recommendations=10)
+            return cf_instance.recommend("item_based", uid, n_recommendations=10)
 
         results = []
         try:

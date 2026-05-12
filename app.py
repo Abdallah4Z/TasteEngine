@@ -242,7 +242,7 @@ def api_evaluate():
             return precisions, recalls
 
         def cf_recommender(uid):
-            return cf.recommend("svd", uid, n_recommendations=10)
+            return cf_train.recommend("item_based", uid, n_recommendations=10)
 
         train_ratings = ratings[~ratings.index.isin(TEST.index)]
         def cb_recommender(uid):
