@@ -2,8 +2,9 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import json as json_module
 import numpy as np
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from utils.helpers import load_data, get_user_preferences
 from recommender.collaborative import CollaborativeFiltering
 from recommender.content_based import ContentBasedRecommender
@@ -39,6 +40,11 @@ for _, u in users.iterrows():
 
 CATEGORIES = sorted(products["category"].unique().tolist())
 BRANDS = sorted(products["brand"].unique().tolist())
+
+for _ in cf_train.train_svd_generator():
+    pass
+for _ in cf_train.compute_slope_one_dev_generator():
+    pass
 
 APPROACHES = {
     "cf": {
@@ -213,24 +219,61 @@ def api_recommend():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/evaluate")
-def api_evaluate():
+CF_METHOD_NAMES = ["user_based", "item_based", "svd", "knn", "slope_one"]
+CF_METHOD_LABELS = {
+    "user_based": "User-Based",
+    "item_based": "Item-Based",
+    "svd": "SVD",
+    "knn": "KNN",
+    "slope_one": "Slope One",
+}
+
+@app.route("/api/evaluate/cf/<method>")
+def api_evaluate_cf(method):
+    if method not in CF_METHOD_NAMES:
+        return jsonify({"error": f"Unknown CF method: {method}"}), 400
     try:
-        cf_results = evaluator.compare_cf_methods(cf_train, TEST, k=5)
+        result = evaluator.evaluate_cf_method(method, cf_train, TEST, k=5)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"method": method, "error": str(e)})
 
-        best_cf = None
-        best_rmse = float("inf")
-        for r in cf_results:
-            if "error" not in r and r["RMSE"] < best_rmse:
-                best_rmse = r["RMSE"]
-                best_cf = r["method"]
 
+@app.route("/api/evaluate/cf/<method>/stream")
+def api_evaluate_cf_stream(method):
+    if method not in ("svd", "slope_one"):
+        return jsonify({"error": f"Streaming not supported for {method}"}), 400
+
+    def generate():
+        try:
+            if method == "svd":
+                gen = cf_train.train_svd_generator()
+                if gen is not None:
+                    for epoch, total in gen:
+                        yield json_module.dumps({"type": "progress", "current": epoch, "total": total}) + "\n"
+
+            elif method == "slope_one":
+                gen = cf_train.compute_slope_one_dev_generator()
+                if gen is not None:
+                    for item, total in gen:
+                        yield json_module.dumps({"type": "progress", "current": item, "total": total}) + "\n"
+
+            yield json_module.dumps({"type": "phase", "label": "Evaluating users..."}) + "\n"
+            result = evaluator.evaluate_cf_method(method, cf_train, TEST, k=5)
+            yield json_module.dumps({"type": "result", "data": result}) + "\n"
+        except Exception as e:
+            yield json_module.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+
+
+@app.route("/api/evaluate/approaches")
+def api_evaluate_approaches():
+    try:
         evaluator.set_test_ratings(TEST)
         test_users = TEST["user_id"].unique()[:20]
 
-        approach_results = []
-
-        def approach_precision_recall(recommender_fn, test_users):
+        def approach_precision_recall(recommender_fn):
             precisions, recalls = [], []
             for uid in test_users:
                 try:
@@ -264,38 +307,31 @@ def api_evaluate():
             }
             return kb.recommend("constraint", constraints=constraints, n_recommendations=10)
 
-        cf_p, cf_r = approach_precision_recall(cf_recommender, test_users)
+        results = []
+        cf_p, cf_r = approach_precision_recall(cf_recommender)
         if cf_p:
-            approach_results.append({
+            results.append({
                 "approach": "Collaborative Filtering",
                 "Precision@5": round(np.mean(cf_p), 4),
                 "Recall@5": round(np.mean(cf_r), 4),
             })
-
-        cb_p, cb_r = approach_precision_recall(cb_recommender, test_users)
+        cb_p, cb_r = approach_precision_recall(cb_recommender)
         if cb_p:
-            approach_results.append({
+            results.append({
                 "approach": "Content-Based",
                 "Precision@5": round(np.mean(cb_p), 4),
                 "Recall@5": round(np.mean(cb_r), 4),
             })
-
-        kb_p, kb_r = approach_precision_recall(kb_recommender, test_users)
+        kb_p, kb_r = approach_precision_recall(kb_recommender)
         if kb_p:
-            approach_results.append({
+            results.append({
                 "approach": "Knowledge-Based",
                 "Precision@5": round(np.mean(kb_p), 4),
                 "Recall@5": round(np.mean(kb_r), 4),
             })
 
-        best_approach = max(approach_results, key=lambda a: a.get("Precision@5", 0))["approach"] if approach_results else None
-
-        return jsonify({
-            "cf_methods": cf_results,
-            "best_cf_method": best_cf,
-            "approaches": approach_results,
-            "best_approach": best_approach,
-        })
+        best = max(results, key=lambda a: a.get("Precision@5", 0))["approach"] if results else None
+        return jsonify({"approaches": results, "best_approach": best})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
