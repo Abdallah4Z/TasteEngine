@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ theme: localStorage.getItem('theme') || 'dark' }" :data-theme="theme">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TasteEngine{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+  <script src="https://unpkg.com/htmx.org@2.0.3/dist/htmx.min.js" defer></script>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js" defer></script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body data-page="{{ active_page|default('home') }}">
+  <div class="ambient-bg">
+    <div class="ambient-blob ambient-blob-1"></div>
+    <div class="ambient-blob ambient-blob-2"></div>
+    <div class="ambient-blob ambient-blob-3"></div>
+  </div>
+
+  {% from "macros.html" import nav %}
+  {{ nav(active_page|default('home')) }}
+
+  <div class="container">
+    {% block breadcrumb %}{% endblock %}
+    {% block content %}{% endblock %}
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.getElementById('themeIcon').textContent = next === 'dark' ? '🌙' : '☀️';
+    }
+
+    function toast(message, type = 'info', duration = 3000) {
+      const container = document.getElementById('toastContainer');
+      const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+      const t = document.createElement('div');
+      t.className = `toast toast-${type}`;
+      t.innerHTML = `
+        <span class="toast-icon">${icons[type] || 'ℹ'}</span>
+        <span>${message}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+      `;
+      container.appendChild(t);
+      setTimeout(() => { if (t.parentElement) t.remove(); }, duration);
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => toast('Copied!', 'success'));
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const theme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.getElementById('themeIcon').textContent = theme === 'dark' ? '🌙' : '☀️';
+    });
+
+    document.addEventListener('htmx:beforeRequest', function() {
+      document.querySelectorAll('.btn.htmx-request').forEach(function(btn) {
+        btn.disabled = true;
+      });
+    });
+    document.addEventListener('htmx:afterRequest', function() {
+      document.querySelectorAll('.btn.htmx-request').forEach(function(btn) {
+        btn.disabled = false;
+      });
+    });
+    document.addEventListener('htmx:responseError', function(evt) {
+      toast('Request failed: ' + (evt.detail.xhr.statusText || 'Unknown error'), 'error');
+    });
+
+    function getCategoryIcon(category) {
+      const icons = {
+        'Electronics': '💻',
+        'Clothing': '👕',
+        'Home & Kitchen': '🏠',
+        'Books': '📚',
+        'Sports': '⚽',
+        'Beauty': '💄',
+        'Toys': '🧸',
+        'Automotive': '🚗'
+      };
+      return icons[category] || '📦';
+    }
+
+    function stars(rating) {
+      const f = Math.floor(rating);
+      return '★'.repeat(f) + '☆'.repeat(5 - f);
+    }
+
+    function syncScroll(source) {
+      const container = source.closest('.synced-scroll');
+      if (!container) return;
+      const pct = source.scrollTop / (source.scrollHeight - source.clientHeight);
+      container.querySelectorAll('.compare-column').forEach(col => {
+        if (col !== source) col.scrollTop = pct * (col.scrollHeight - col.clientHeight);
+      });
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+      const page = document.body.getAttribute('data-page');
+      if (e.key === '1' && page === 'recommend') {
+        const btn = document.querySelector('.btn-approach[data-approach="cf"]');
+        if (btn) { btn.click(); toast('Selected Collaborative Filtering', 'info', 1500); }
+      }
+      if (e.key === '2' && page === 'recommend') {
+        const btn = document.querySelector('.btn-approach[data-approach="content"]');
+        if (btn) { btn.click(); toast('Selected Content-Based', 'info', 1500); }
+      }
+      if (e.key === '3' && page === 'recommend') {
+        const btn = document.querySelector('.btn-approach[data-approach="knowledge"]');
+        if (btn) { btn.click(); toast('Selected Knowledge-Based', 'info', 1500); }
+      }
+      if ((e.key === 'r' || e.key === 'Enter') && page === 'recommend') {
+        const genBtn = document.querySelector('.btn-primary');
+        if (genBtn && !genBtn.disabled) genBtn.click();
+      }
+      if (e.key === 'e' && page !== 'evaluate') { window.location.href = '/evaluate'; }
+      if (e.key === 'h' && page !== 'home') { window.location.href = '/'; }
+    });
+
+    {% block page_globals %}{% endblock %}
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

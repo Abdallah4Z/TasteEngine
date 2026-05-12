@@ -1,347 +1,411 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TasteEngine — Recommendations</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-    <nav class="nav">
-        <a href="/" class="nav-brand">Taste<span>Engine</span></a>
-        <div class="nav-links">
-            <a href="/">Home</a>
-            <a href="/recommend" class="active">Recommend</a>
-            <a href="/evaluate">Evaluate</a>
+{% extends "base.html" %}
+{% block title %}TasteEngine — Recommendations{% endblock %}
+
+{% block breadcrumb %}
+<ul class="breadcrumb">
+  <li><a href="/">Home</a><span class="sep">/</span></li>
+  <li class="current">Recommend</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+{% from "macros.html" import glass, spinner, skeleton_cards %}
+
+<div x-data="recommendApp()">
+  <div class="row">
+    {% call glass("User") %}
+      <div class="form-group">
+        <label class="form-label" for="userSelect">Select User</label>
+        <select id="userSelect" x-model="selectedUserId" @change="onUserChange">
+          <option value="">-- Choose --</option>
+          {% for u in users %}
+          <option value="{{ u.id }}">{{ u.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mt-1" x-show="selectedUser" x-cloak>
+        <div class="compact-row">
+          <div class="profile-avatar" style="width:40px;height:40px;font-size:1rem;" x-text="selectedUser?.name?.charAt(0) || '?'"></div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);font-size:0.9rem;" x-text="selectedUser?.name"></div>
+            <div style="font-size:0.8rem;color:var(--text-muted);" x-text="'Categories: ' + (selectedUser?.categories?.join(', ') || 'none')"></div>
+          </div>
         </div>
-    </nav>
+      </div>
+    {% endcall %}
 
-    <div class="container">
-        <div class="row">
-            <div class="glass">
-                <h2 class="glass-header">User</h2>
-                <div class="form-group">
-                    <label class="form-label">Select User</label>
-                    <select id="userSelect" onchange="onUserChange()">
-                        <option value="">-- Choose --</option>
-                        {% for u in users %}
-                        <option value="{{ u.id }}">{{ u.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div id="profileMini" class="hidden mt-1">
-                    <div class="compact-row">
-                        <div class="profile-avatar" id="miniAvatar" style="width:40px;height:40px;font-size:1rem;">A</div>
-                        <div>
-                            <div id="miniName" style="font-weight:600;color:#fff;font-size:0.9rem;"></div>
-                            <div id="miniCats" style="font-size:0.8rem;color:rgba(255,255,255,0.5);"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    {% call glass("Number of Recommendations") %}
+      <div class="form-group">
+        <input type="number" id="nRecs" value="10" min="1" max="50" style="max-width: 100px;" x-model.number="nRecs">
+      </div>
+    {% endcall %}
+  </div>
 
-            <div class="glass">
-                <h2 class="glass-header">Number of Recommendations</h2>
-                <div class="form-group">
-                    <input type="number" id="nRecs" value="10" min="1" max="50" style="max-width: 100px;">
-                </div>
-            </div>
-        </div>
-
-        <div class="glass">
-            <h2 class="glass-header">Choose Approach & Method</h2>
-            <div class="btn-group" id="approachGroup">
-                <button class="btn-approach" data-approach="cf" onclick="selectApproach('cf')">
-                    <span class="icon">🤝</span>
-                    Collaborative Filtering
-                </button>
-                <button class="btn-approach" data-approach="content" onclick="selectApproach('content')">
-                    <span class="icon">🏷️</span>
-                    Content-Based
-                </button>
-                <button class="btn-approach" data-approach="knowledge" onclick="selectApproach('knowledge')">
-                    <span class="icon">⚙️</span>
-                    Knowledge-Based
-                </button>
-            </div>
-
-            <div id="methodsContainer" class="mt-2">
-                {% for key, approach in approaches.items() %}
-                <div id="methods-{{ key }}" class="methods-group hidden">
-                    <div class="btn-group">
-                        {% for m in approach.methods %}
-                        <button class="btn-method" data-method="{{ m.id }}" data-approach="{{ key }}" onclick="selectMethod('{{ key }}', '{{ m.id }}')">{{ m.label }}</button>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            <div class="mt-2">
-                <button class="btn btn-primary" onclick="getRecommendations()">🚀 Generate Recommendations</button>
-            </div>
-        </div>
-
-        <div id="resultsContainer" class="hidden">
-            <div class="tabs" id="resultTabs">
-                <button class="tab active" data-tab="tab-cards" onclick="switchTab('tab-cards')">📋 Cards</button>
-                <button class="tab" data-tab="tab-compare" onclick="switchTab('tab-compare')">🔄 Compare Approaches</button>
-            </div>
-
-            <div id="tab-cards" class="tab-content active">
-                <div class="glass">
-                    <h2 class="glass-header" id="resultHeader">Recommendations</h2>
-                    <div id="productGrid" class="product-grid mt-2"></div>
-                </div>
-            </div>
-
-            <div id="tab-compare" class="tab-content">
-                <div class="glass">
-                    <h2 class="glass-header">Compare All Approaches</h2>
-                    <p style="color:rgba(255,255,255,0.5);font-size:0.85rem;margin-bottom:1rem;">Select a user first, then click below to compare.</p>
-                    <button class="btn btn-primary" onclick="compareAll()">🔄 Compare All Approaches</button>
-                    <div id="compareResults" class="mt-2"></div>
-                </div>
-            </div>
-        </div>
-
-        <div id="loadingIndicator" class="loading hidden">
-            <div class="spinner"></div>
-            <span>Generating recommendations...</span>
-        </div>
+  {% call glass("Choose Approach & Method") %}
+    <div class="btn-group" id="approachGroup">
+      <template x-for="(app, key) in approaches" :key="key">
+        <button class="btn-approach"
+          :class="{ active: currentApproach === key }"
+          :data-approach="key"
+          @click="selectApproach(key)">
+          <span class="icon" x-text="app.icon"></span>
+          <span x-text="app.label"></span>
+        </button>
+      </template>
     </div>
 
-    <script>
-        const userData = {{ users | tojson | safe }};
-        const approaches = {{ approaches | tojson | safe }};
-        let currentApproach = 'cf';
-        let currentMethod = 'user_based';
+    <div class="mt-2">
+      <template x-for="(app, key) in approaches" :key="key">
+        <div x-show="currentApproach === key" x-transition.duration.200ms>
+          <div class="btn-group">
+            <template x-for="m in app.methods" :key="m.id">
+              <button class="btn-method"
+                :class="{ active: currentMethod === m.id }"
+                @click="currentMethod = m.id"
+                x-text="m.label">
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
 
-        const savedUser = localStorage.getItem('selectedUser');
-        if (savedUser) {
-            document.getElementById('userSelect').value = savedUser;
-            onUserChange();
+    <div class="mt-2">
+      <button class="btn btn-primary" @click="getRecommendations()" :disabled="loading || !selectedUserId">
+        <span x-show="!loading">Get Recommendations</span>
+        <span x-show="loading">Generating...</span>
+      </button>
+    </div>
+  {% endcall %}
+
+  <div x-show="showResults" x-cloak x-transition.duration.300ms>
+    <div class="tabs">
+      <button class="tab" :class="{ active: activeTab === 'cards' }" @click="activeTab = 'cards'">Cards</button>
+      <button class="tab" :class="{ active: activeTab === 'compare' }" @click="activeTab = 'compare'">Compare Approaches</button>
+    </div>
+
+    <div x-show="activeTab === 'cards'" x-transition>
+      {% call glass("") %}
+        <h2 class="glass-header" x-text="resultTitle"></h2>
+        <div class="mt-2">
+          <div x-show="!results && loading" x-transition>
+            {{ skeleton_cards(6) }}
+          </div>
+          <div x-show="results && results.length === 0" x-transition>
+            {% from "macros.html" import empty_state %}
+            {{ empty_state('📭', 'No recommendations', 'Try a different approach or method.') }}
+          </div>
+
+          <div class="filter-bar" x-show="results && results.length > 0" x-cloak>
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select x-model="filterCategory">
+                <option value="">All Categories</option>
+                <template x-for="cat in availableCategories" :key="cat">
+                  <option :value="cat" x-text="cat"></option>
+                </template>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Brand</label>
+              <select x-model="filterBrand">
+                <option value="">All Brands</option>
+                <template x-for="b in availableBrands" :key="b">
+                  <option :value="b" x-text="b"></option>
+                </template>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Max Price</label>
+              <input type="number" x-model.number="filterPriceMax" placeholder="Any" min="0" style="min-width:100px;">
+            </div>
+            <div class="form-group" style="align-self:end;">
+              <button class="btn btn-ghost btn-sm" @click="filterCategory=''; filterBrand=''; filterPriceMax=null">
+                Clear Filters
+              </button>
+            </div>
+          </div>
+
+          <div class="product-grid" x-show="results && results.length > 0" x-transition>
+            <template x-for="(item, idx) in filteredResults" :key="item.id">
+              <div class="product-card stagger"
+                :data-category="item.category"
+                :style="{ animationDelay: (idx * 60) + 'ms' }"
+                @mouseenter="item.showTooltip = true"
+                @mouseleave="item.showTooltip = false">
+                <div class="product-icon" x-text="getCategoryIcon(item.category)"></div>
+                <div class="product-name" x-text="item.name"></div>
+                <div class="product-meta" x-text="item.brand + ' · ' + item.subcategory"></div>
+                <div class="compact-row flex-between">
+                  <div class="product-price" x-text="'$' + item.price.toFixed(2)"></div>
+                  <div class="product-rating">
+                    <span x-text="stars(item.avg_rating)"></span>
+                    <span x-text="item.avg_rating"></span>
+                  </div>
+                </div>
+                <div class="product-score-bar" x-show="item.score">
+                  <div class="product-score-bar-fill" :style="{ width: (item.score * 100) + '%' }"></div>
+                </div>
+                <div class="product-explanation" x-text="item.explanation"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      {% endcall %}
+    </div>
+
+    <div x-show="activeTab === 'compare'" x-transition>
+      {% call glass("Compare All Approaches") %}
+        <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">
+          Compare all methods across Collaborative Filtering, Content-Based, and Knowledge-Based.
+        </p>
+        <button class="btn btn-primary" @click="compareAll()" :disabled="loading || !selectedUserId">
+          <span x-show="!loading">Compare All Approaches</span>
+          <span x-show="loading">Loading...</span>
+        </button>
+        <div class="mt-2" x-show="compareResults">
+          <div class="compare-view synced-scroll">
+            <template x-for="col in compareResults" :key="col.method || col.label">
+              <div class="compare-column" @scroll="syncScroll($el)">
+                <h3 x-text="col.label"></h3>
+                <template x-if="col.error">
+                  <p class="text-dim" style="font-size:0.8rem;" x-text="col.error"></p>
+                </template>
+                <template x-if="!col.error && (!col.items || col.items.length === 0)">
+                  <p class="text-dim" style="font-size:0.8rem;">No results</p>
+                </template>
+                <template x-for="(item, i) in col.items" :key="i">
+                  <div class="compare-item">
+                    <div class="compare-item-name" x-text="(i+1) + '. ' + item.name"></div>
+                    <div class="compare-item-meta" x-text="'$' + item.price.toFixed(2) + ' · ' + item.brand"></div>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      {% endcall %}
+    </div>
+  </div>
+</div>
+
+<div class="kbd-hint" id="kbdHint">
+  <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Select approach ·
+  <kbd>R</kbd> Recommend ·
+  <kbd>E</kbd> Evaluate ·
+  <kbd>H</kbd> Home
+</div>
+
+<script>
+  setTimeout(() => document.getElementById('kbdHint')?.classList.add('visible'), 2000);
+  setTimeout(() => document.getElementById('kbdHint')?.classList.remove('visible'), 8000);
+  document.addEventListener('keydown', () => {
+    const h = document.getElementById('kbdHint');
+    if (h) h.classList.remove('visible');
+  });
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const userData = {{ users | tojson | safe }};
+  const approaches = {{ approaches | tojson | safe }};
+
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('recommendApp', () => ({
+      approaches: approaches,
+      selectedUserId: null,
+      selectedUser: null,
+      currentApproach: 'cf',
+      currentMethod: 'user_based',
+      loading: false,
+      results: null,
+      resultTitle: '',
+      compareResults: null,
+      activeTab: 'cards',
+      nRecs: 10,
+      showResults: false,
+      filterCategory: '',
+      filterBrand: '',
+      filterPriceMax: null,
+
+      get availableCategories() {
+        return [...new Set((this.results || []).map(i => i.category))];
+      },
+
+      get availableBrands() {
+        return [...new Set((this.results || []).map(i => i.brand))];
+      },
+
+      get filteredResults() {
+        let items = this.results || [];
+        if (this.filterCategory) items = items.filter(i => i.category === this.filterCategory);
+        if (this.filterBrand) items = items.filter(i => i.brand === this.filterBrand);
+        if (this.filterPriceMax) items = items.filter(i => i.price <= this.filterPriceMax);
+        return items;
+      },
+
+      init() {
+        const params = new URLSearchParams(window.location.search);
+        const urlUser = params.get('user');
+        const urlApproach = params.get('approach');
+        const urlMethod = params.get('method');
+        const saved = urlUser || localStorage.getItem('selectedUser');
+        if (saved) {
+          this.selectedUserId = parseInt(saved);
+          this.onUserChange();
+        }
+        if (urlApproach && this.approaches[urlApproach]) {
+          this.currentApproach = urlApproach;
+          if (urlMethod) this.currentMethod = urlMethod;
+          else if (this.approaches[urlApproach].methods.length > 0) {
+            this.currentMethod = this.approaches[urlApproach].methods[0].id;
+          }
+        }
+        setTimeout(() => {
+          if (urlUser) this.getRecommendations();
+        }, 300);
+      },
+
+      updateUrl() {
+        const params = new URLSearchParams();
+        if (this.selectedUserId) params.set('user', this.selectedUserId);
+        if (this.currentApproach) params.set('approach', this.currentApproach);
+        if (this.currentMethod) params.set('method', this.currentMethod);
+        const qs = params.toString();
+        const url = window.location.pathname + (qs ? '?' + qs : '');
+        window.history.replaceState({}, '', url);
+      },
+
+      onUserChange() {
+        const uid = this.selectedUserId;
+        if (!uid) {
+          this.selectedUser = null;
+          return;
+        }
+        this.selectedUser = userData.find(u => u.id === uid);
+        localStorage.setItem('selectedUser', uid);
+        this.results = null;
+        this.compareResults = null;
+        this.updateUrl();
+      },
+
+      selectApproach(key) {
+        this.currentApproach = key;
+        const methods = this.approaches[key].methods;
+        if (methods.length > 0) {
+          this.currentMethod = methods[0].id;
+        }
+        this.results = null;
+        this.compareResults = null;
+        this.updateUrl();
+      },
+
+      async getRecommendations() {
+        if (!this.selectedUserId) {
+          toast('Please select a user first.', 'warning');
+          return;
         }
 
-        document.getElementById('userSelect').addEventListener('change', function() {
-            localStorage.setItem('selectedUser', this.value);
-        });
+        this.loading = true;
+        this.results = null;
+        this.compareResults = null;
 
-        function onUserChange() {
-            const uid = parseInt(document.getElementById('userSelect').value);
-            if (!uid) {
-                document.getElementById('profileMini').classList.add('hidden');
-                return;
-            }
-            const user = userData.find(u => u.id === uid);
-            if (!user) return;
+        try {
+          const r = await fetch('/api/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: this.selectedUserId,
+              approach: this.currentApproach,
+              method: this.currentMethod,
+              n: this.nRecs
+            })
+          });
+          const data = await r.json();
 
-            document.getElementById('profileMini').classList.remove('hidden');
-            document.getElementById('miniAvatar').textContent = user.name.charAt(0);
-            document.getElementById('miniName').textContent = user.name;
-            document.getElementById('miniCats').textContent = 'Categories: ' + (user.categories || []).join(', ');
+          if (data.error) {
+            toast(data.error, 'error');
+            this.results = [];
+            return;
+          }
+
+          const appInfo = this.approaches[this.currentApproach];
+          const methodInfo = appInfo.methods.find(m => m.id === this.currentMethod);
+          this.resultTitle = `Recommendations via ${appInfo.label} — ${methodInfo ? methodInfo.label : this.currentMethod}`;
+
+          this.results = data.recommendations || [];
+          this.activeTab = 'cards';
+          this.showResults = true;
+          this.updateUrl();
+
+          if (this.results.length > 0) {
+            toast(`Found ${this.results.length} recommendations`, 'success');
+          }
+        } catch (err) {
+          toast('Error: ' + err.message, 'error');
+          this.results = [];
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      async compareAll() {
+        if (!this.selectedUserId) {
+          toast('Please select a user first.', 'warning');
+          return;
         }
 
-        function selectApproach(approach) {
-            currentApproach = approach;
+        this.loading = true;
+        this.compareResults = null;
 
-            document.querySelectorAll('.btn-approach').forEach(b => b.classList.remove('active'));
-            document.querySelector(`.btn-approach[data-approach="${approach}"]`).classList.add('active');
-
-            document.querySelectorAll('.methods-group').forEach(g => g.classList.add('hidden'));
-            document.getElementById(`methods-${approach}`).classList.remove('hidden');
-
-            const firstMethod = document.querySelector(`#methods-${approach} .btn-method`);
-            if (firstMethod) {
-                currentMethod = firstMethod.dataset.method;
-                document.querySelectorAll('.btn-method').forEach(b => b.classList.remove('active'));
-                firstMethod.classList.add('active');
-            }
-
-            document.getElementById('resultsContainer').classList.add('hidden');
-        }
-
-        function selectMethod(approach, method) {
-            currentMethod = method;
-            document.querySelectorAll(`#methods-${approach} .btn-method`).forEach(b => b.classList.remove('active'));
-            document.querySelector(`#methods-${approach} .btn-method[data-method="${method}"]`).classList.add('active');
-        }
-
-        selectApproach('cf');
-
-        function getRecommendations(userOverride, approachOverride, methodOverride) {
-            const uid = parseInt(userOverride || document.getElementById('userSelect').value);
-            const approach = approachOverride || currentApproach;
-            const method = methodOverride || currentMethod;
-            const n = parseInt(document.getElementById('nRecs').value) || 10;
-
-            if (!uid) {
-                alert('Please select a user first.');
-                return;
-            }
-
-            document.getElementById('loadingIndicator').classList.remove('hidden');
-            document.getElementById('resultsContainer').classList.add('hidden');
-
-            fetch('/api/recommend', {
+        const promises = [];
+        const totalMethods = Object.values(this.approaches).reduce((sum, a) => sum + a.methods.length, 0);
+        Object.keys(this.approaches).forEach(appKey => {
+          this.approaches[appKey].methods.forEach(m => {
+            promises.push(
+              fetch('/api/recommend', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: uid, approach: approach, method: method, n: n })
-            })
-            .then(r => r.json())
-            .then(data => {
-                document.getElementById('loadingIndicator').classList.add('hidden');
+                body: JSON.stringify({ user_id: this.selectedUserId, approach: appKey, method: m.id, n: 5 })
+              })
+              .then(r => r.json())
+              .then(data => ({
+                approach: appKey,
+                method: m.id,
+                label: this.approaches[appKey].icon + ' ' + m.label,
+                data
+              }))
+              .catch(err => ({
+                approach: appKey,
+                method: m.id,
+                label: this.approaches[appKey].icon + ' ' + m.label,
+                data: { error: err.message, recommendations: [] }
+              }))
+            );
+          });
+        });
 
-                if (data.error) {
-                    document.getElementById('productGrid').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>${data.error}</p></div>`;
-                    document.getElementById('resultsContainer').classList.remove('hidden');
-                    return;
-                }
-
-                const approachInfo = approaches[approach];
-                const methodInfo = approachInfo.methods.find(m => m.id === method);
-                document.getElementById('resultHeader').textContent =
-                    `Recommendations via ${approachInfo.label} — ${methodInfo ? methodInfo.label : method}`;
-
-                const grid = document.getElementById('productGrid');
-                grid.innerHTML = '';
-
-                if (!data.recommendations || data.recommendations.length === 0) {
-                    grid.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No recommendations found. Try a different approach.</p></div>`;
-                    document.getElementById('resultsContainer').classList.remove('hidden');
-                    return;
-                }
-
-                data.recommendations.forEach(item => {
-                    const card = document.createElement('div');
-                    card.className = 'product-card';
-
-                    const stars = '★'.repeat(Math.floor(item.avg_rating)) + '☆'.repeat(5 - Math.floor(item.avg_rating));
-
-                    card.innerHTML = `
-                        <div class="product-icon">${getCategoryIcon(item.category)}</div>
-                        <div class="product-name">${item.name}</div>
-                        <div class="product-meta">${item.brand} · ${item.subcategory}</div>
-                        <div class="compact-row">
-                            <div class="product-price">$${item.price.toFixed(2)}</div>
-                            <div class="product-rating">${stars} ${item.avg_rating}</div>
-                        </div>
-                        <div class="product-explanation">💡 ${item.explanation}</div>
-                    `;
-                    grid.appendChild(card);
-                });
-
-                document.getElementById('resultsContainer').classList.remove('hidden');
-                switchTab('tab-cards');
-            })
-            .catch(err => {
-                document.getElementById('loadingIndicator').classList.add('hidden');
-                document.getElementById('productGrid').innerHTML = `<div class="empty-state"><div class="icon">❌</div><p>Error: ${err.message}</p></div>`;
-                document.getElementById('resultsContainer').classList.remove('hidden');
-            });
+        try {
+          const results = await Promise.all(promises);
+          this.compareResults = results.map(r => ({
+            approach: r.approach,
+            method: r.method,
+            label: r.label,
+            error: r.data.error,
+            items: r.data.recommendations || []
+          }));
+          this.activeTab = 'compare';
+          this.showResults = true;
+          const loaded = results.filter(r => !r.data.error && r.data.recommendations?.length).length;
+          toast(`Loaded ${loaded} of ${totalMethods} methods`, loaded === totalMethods ? 'success' : 'warning');
+        } catch (err) {
+          toast('Error: ' + err.message, 'error');
+        } finally {
+          this.loading = false;
         }
-
-        function compareAll() {
-            const uid = parseInt(document.getElementById('userSelect').value);
-            if (!uid) {
-                alert('Please select a user first.');
-                return;
-            }
-
-            document.getElementById('loadingIndicator').classList.remove('hidden');
-            const container = document.getElementById('compareResults');
-            container.innerHTML = '';
-
-            const cfMethods = approaches.cf.methods.map(m => m.id);
-            const promises = [];
-
-            cfMethods.forEach(m => {
-                promises.push(
-                    fetch('/api/recommend', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user_id: uid, approach: 'cf', method: m, n: 5 })
-                    }).then(r => r.json()).then(data => ({ approach: 'cf', method: m, data }))
-                );
-            });
-
-            Object.keys(approaches).forEach(app => {
-                const methods = approaches[app].methods;
-                methods.forEach(m => {
-                    if (app !== 'cf') {
-                        promises.push(
-                            fetch('/api/recommend', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ user_id: uid, approach: app, method: m.id, n: 5 })
-                            }).then(r => r.json()).then(data => ({ approach: app, method: m.id, data }))
-                        );
-                    }
-                });
-            });
-
-            Promise.all(promises).then(results => {
-                document.getElementById('loadingIndicator').classList.add('hidden');
-                document.getElementById('resultsContainer').classList.remove('hidden');
-                switchTab('tab-compare');
-
-                container.innerHTML = '<div class="compare-view"></div>';
-                const compareGrid = container.querySelector('.compare-view');
-
-                results.forEach(result => {
-                    const appInfo = approaches[result.approach];
-                    const methodInfo = appInfo.methods.find(m => m.id === result.method);
-                    const col = document.createElement('div');
-                    col.className = 'compare-column';
-                    col.innerHTML = `<h3>${appInfo.icon} ${methodInfo ? methodInfo.label : result.method}</h3>`;
-
-                    if (result.data.error) {
-                        col.innerHTML += `<p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">${result.data.error}</p>`;
-                    } else if (!result.data.recommendations || result.data.recommendations.length === 0) {
-                        col.innerHTML += `<p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">No results</p>`;
-                    } else {
-                        const list = document.createElement('div');
-                        result.data.recommendations.forEach((item, i) => {
-                            const div = document.createElement('div');
-                            div.style.cssText = 'padding:0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size:0.8rem;';
-                            div.innerHTML = `
-                                <div style="font-weight:500;color:#fff;">${i+1}. ${item.name}</div>
-                                <div style="color:rgba(255,255,255,0.4);">$${item.price.toFixed(2)} · ${item.brand}</div>
-                            `;
-                            list.appendChild(div);
-                        });
-                        col.appendChild(list);
-                    }
-                    compareGrid.appendChild(col);
-                });
-            }).catch(err => {
-                document.getElementById('loadingIndicator').classList.add('hidden');
-                container.innerHTML = `<div class="empty-state"><div class="icon">❌</div><p>Error: ${err.message}</p></div>`;
-            });
-        }
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelector(`.tab[data-tab="${tabId}"]`).classList.add('active');
-            document.getElementById(tabId).classList.add('active');
-        }
-
-        function getCategoryIcon(category) {
-            const icons = {
-                'Electronics': '💻',
-                'Clothing': '👕',
-                'Home & Kitchen': '🏠',
-                'Books': '📚',
-                'Sports': '⚽',
-                'Beauty': '💄',
-                'Toys': '🧸',
-                'Automotive': '🚗'
-            };
-            return icons[category] || '📦';
-        }
-    </script>
-</body>
-</html>
+      },
+    }));
+  });
+</script>
+{% endblock %}

@@ -92,6 +92,7 @@ def get_product_info(product_id):
 @app.route("/")
 def index():
     return render_template("index.html",
+                           active_page="home",
                            users=USER_OPTIONS,
                            categories=CATEGORIES,
                            brands=BRANDS,
@@ -101,6 +102,7 @@ def index():
 @app.route("/recommend")
 def recommend_page():
     return render_template("recommend.html",
+                           active_page="recommend",
                            users=USER_OPTIONS,
                            categories=CATEGORIES,
                            brands=BRANDS,
@@ -110,6 +112,7 @@ def recommend_page():
 @app.route("/evaluate")
 def evaluate_page():
     return render_template("evaluation.html",
+                           active_page="evaluate",
                            users=USER_OPTIONS,
                            categories=CATEGORIES,
                            brands=BRANDS,
@@ -295,6 +298,121 @@ def api_evaluate():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/products/filter")
+def api_products_filter():
+    cat = request.args.get("category")
+    brand = request.args.get("brand")
+    price_min = request.args.get("price_min", type=float)
+    price_max = request.args.get("price_max", type=float)
+    q = request.args.get("q", "").lower()
+    filtered = products.copy()
+    if cat:
+        filtered = filtered[filtered["category"] == cat]
+    if brand:
+        filtered = filtered[filtered["brand"] == brand]
+    if price_min is not None:
+        filtered = filtered[filtered["price"] >= price_min]
+    if price_max is not None:
+        filtered = filtered[filtered["price"] <= price_max]
+    if q:
+        filtered = filtered[filtered["name"].str.lower().str.contains(q, na=False)]
+    results = []
+    for _, row in filtered.iterrows():
+        results.append(get_product_info(row["product_id"]))
+    return jsonify({
+        "total": len(results),
+        "products": results,
+    })
+
+
+@app.route("/api/user/<int:user_id>/preferences", methods=["PUT"])
+def api_update_preferences(user_id):
+    data = request.json
+    user_idx = users[users["user_id"] == user_id].index
+    if user_idx.empty:
+        return jsonify({"error": "User not found"}), 404
+    if "budget_min" in data:
+        users.at[user_idx[0], "budget_min"] = data["budget_min"]
+    if "budget_max" in data:
+        users.at[user_idx[0], "budget_max"] = data["budget_max"]
+    prefs = get_user_preferences(users, user_id)
+    for u in USER_OPTIONS:
+        if u["id"] == user_id:
+            u["budget_min"] = float(prefs.get("budget_min", 0))
+            u["budget_max"] = float(prefs.get("budget_max", 999999))
+            break
+    return jsonify({"success": True, "preferences": prefs})
+
+
+@app.route("/htmx/recommend", methods=["POST"])
+def htmx_recommend():
+    data = request.json or request.form
+    user_id = data.get("user_id", type=int)
+    approach = data.get("approach", "cf")
+    method = data.get("method", "user_based")
+    n_recs = data.get("n", 10, type=int)
+
+    if not user_id:
+        return '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Please select a user first.</p></div>'
+
+    user_rated = get_user_rated_items(user_id)
+    prefs = get_user_preferences(users, user_id)
+
+    try:
+        if approach == "cf":
+            recs = cf.recommend(method, user_id, n_recommendations=n_recs)
+        elif approach == "content":
+            recs = cb.recommend(method, user_profile_items=user_rated, preferences=prefs, n_recommendations=n_recs)
+        elif approach == "knowledge":
+            constraints = {
+                "budget_min": prefs.get("budget_min", 0),
+                "budget_max": prefs.get("budget_max", 999999),
+                "category": list(prefs.get("preferred_categories", set())),
+                "brand": list(prefs.get("favorite_brands", set())),
+            }
+            recs = kb.recommend(method, constraints=constraints, preferences=prefs, n_recommendations=n_recs)
+        else:
+            return f'<div class="empty-state"><div class="empty-icon">❌</div><p>Unknown approach: {approach}</p></div>'
+    except Exception as e:
+        return f'<div class="empty-state"><div class="empty-icon">❌</div><p>{str(e)}</p></div>'
+
+    if not recs:
+        return '<div class="empty-state"><div class="empty-icon">📭</div><p>No recommendations found.</p></div>'
+
+    html = '<div class="product-grid">'
+    for pid, score in recs:
+        product = get_product_info(pid)
+        if not product:
+            continue
+        explanation = "Recommended based on your preferences."
+        html += f'''
+        <div class="product-card">
+            <div class="product-icon">{get_category_icon(product["category"])}</div>
+            <div class="product-name">{product["name"]}</div>
+            <div class="product-meta">{product["brand"]} · {product["subcategory"]}</div>
+            <div class="compact-row">
+                <div class="product-price">${product["price"]:.2f}</div>
+                <div class="product-rating">{stars_html(product["avg_rating"])} {product["avg_rating"]}</div>
+            </div>
+            <div class="product-explanation">{explanation}</div>
+        </div>'''
+    html += '</div>'
+    return html
+
+
+def get_category_icon(category):
+    icons = {
+        "Electronics": "💻", "Clothing": "👕", "Home & Kitchen": "🏠",
+        "Books": "📚", "Sports": "⚽", "Beauty": "💄", "Toys": "🧸", "Automotive": "🚗"
+    }
+    return icons.get(category, "📦")
+
+
+def stars_html(rating):
+    f = int(rating)
+    return "★" * f + "☆" * (5 - f)
 
 
 if __name__ == "__main__":
