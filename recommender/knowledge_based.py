@@ -15,12 +15,19 @@ class KnowledgeBasedRecommender:
             filtered = filtered[filtered["price"] >= constraints["budget_min"]]
         if "category" in constraints and constraints["category"]:
             filtered = filtered[filtered["category"].isin(constraints["category"])]
+
+        brand_match = None
         if "brand" in constraints and constraints["brand"]:
-            filtered = filtered[filtered["brand"].isin(constraints["brand"])]
+            brand_match = filtered[filtered["brand"].isin(constraints["brand"])]
+        if brand_match is not None and not brand_match.empty:
+            filtered = brand_match
+
         if "min_rating" in constraints:
             filtered = filtered[filtered["avg_rating"] >= constraints["min_rating"]]
         if "subcategory" in constraints and constraints["subcategory"]:
-            filtered = filtered[filtered["subcategory"].isin(constraints["subcategory"])]
+            sub_match = filtered[filtered["subcategory"].isin(constraints["subcategory"])]
+            if not sub_match.empty:
+                filtered = sub_match
 
         filtered = filtered.sort_values("avg_rating", ascending=False)
         results = [(int(row["product_id"]), float(row["avg_rating"])) for _, row in filtered.head(n_recommendations).iterrows()]

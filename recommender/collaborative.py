@@ -29,7 +29,8 @@ class CollaborativeFiltering:
         if u_idx is None:
             return []
 
-        sim_matrix = cosine_similarity(self.user_item_matrix)
+        matrix_filled = np.nan_to_num(self.user_item_matrix, nan=self.global_mean)
+        sim_matrix = cosine_similarity(matrix_filled)
         user_sim = sim_matrix[u_idx]
         user_sim[u_idx] = 0
 
