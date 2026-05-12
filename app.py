@@ -222,32 +222,76 @@ def api_evaluate():
                 best_rmse = r["RMSE"]
                 best_cf = r["method"]
 
+        evaluator.set_test_ratings(TEST)
+        test_users = TEST["user_id"].unique()[:20]
+
         approach_results = []
 
-        def run_cf_for_user(uid):
+        def approach_precision_recall(recommender_fn, test_users):
+            precisions, recalls = [], []
+            for uid in test_users:
+                try:
+                    recs = recommender_fn(uid)
+                except Exception:
+                    recs = []
+                rec_items = [r[0] for r in recs]
+                relevant = evaluator._get_relevant_for_user(uid)
+                if relevant:
+                    precisions.append(evaluator.precision_at_k(rec_items, relevant, 5))
+                    recalls.append(evaluator.recall_at_k(rec_items, relevant, 5))
+            return precisions, recalls
+
+        def cf_recommender(uid):
             return cf.recommend("svd", uid, n_recommendations=10)
 
-        cf_precisions = []
-        cf_recalls = []
-        test_users = TEST["user_id"].unique()[:20]
-        for uid in test_users:
-            recs = run_cf_for_user(uid)
-            rec_items = [r[0] for r in recs]
-            relevant = TEST[(TEST["user_id"] == uid) & (TEST["rating"] >= 3.5)]["product_id"].tolist()
-            if relevant:
-                cf_precisions.append(evaluator.precision_at_k(rec_items, relevant, 5))
-                cf_recalls.append(evaluator.recall_at_k(rec_items, relevant, 5))
-        if cf_precisions:
+        train_ratings = ratings[~ratings.index.isin(TEST.index)]
+        def cb_recommender(uid):
+            profile = train_ratings[
+                (train_ratings["user_id"] == uid) & (train_ratings["rating"] >= 3.5)
+            ]["product_id"].tolist()
+            return cb.recommend("tfidf", user_profile_items=profile, n_recommendations=10)
+
+        def kb_recommender(uid):
+            prefs = get_user_preferences(users, uid)
+            constraints = {
+                "budget_min": prefs.get("budget_min", 0),
+                "budget_max": prefs.get("budget_max", 999999),
+                "category": list(prefs.get("preferred_categories", set())),
+                "brand": list(prefs.get("favorite_brands", set())),
+            }
+            return kb.recommend("constraint", constraints=constraints, n_recommendations=10)
+
+        cf_p, cf_r = approach_precision_recall(cf_recommender, test_users)
+        if cf_p:
             approach_results.append({
                 "approach": "Collaborative Filtering",
-                "Precision@5": round(np.mean(cf_precisions), 4),
-                "Recall@5": round(np.mean(cf_recalls), 4),
+                "Precision@5": round(np.mean(cf_p), 4),
+                "Recall@5": round(np.mean(cf_r), 4),
             })
+
+        cb_p, cb_r = approach_precision_recall(cb_recommender, test_users)
+        if cb_p:
+            approach_results.append({
+                "approach": "Content-Based",
+                "Precision@5": round(np.mean(cb_p), 4),
+                "Recall@5": round(np.mean(cb_r), 4),
+            })
+
+        kb_p, kb_r = approach_precision_recall(kb_recommender, test_users)
+        if kb_p:
+            approach_results.append({
+                "approach": "Knowledge-Based",
+                "Precision@5": round(np.mean(kb_p), 4),
+                "Recall@5": round(np.mean(kb_r), 4),
+            })
+
+        best_approach = max(approach_results, key=lambda a: a.get("Precision@5", 0))["approach"] if approach_results else None
 
         return jsonify({
             "cf_methods": cf_results,
             "best_cf_method": best_cf,
             "approaches": approach_results,
+            "best_approach": best_approach,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

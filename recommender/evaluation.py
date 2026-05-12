@@ -7,6 +7,23 @@ class Evaluator:
     def __init__(self, ratings_df, predictions_df=None):
         self.ratings = ratings_df
         self.predictions = predictions_df
+        self._test_ratings = None
+
+    def set_test_ratings(self, test_ratings):
+        self._test_ratings = test_ratings
+
+    def _get_relevant_for_user(self, user_id, rating_threshold=3.5):
+        if self._test_ratings is not None:
+            relevant = self._test_ratings[
+                (self._test_ratings["user_id"] == user_id) &
+                (self._test_ratings["rating"] >= rating_threshold)
+            ]["product_id"].tolist()
+        else:
+            relevant = self.ratings[
+                (self.ratings["user_id"] == user_id) &
+                (self.ratings["rating"] >= rating_threshold)
+            ]["product_id"].tolist()
+        return relevant
 
     def rmse(self, y_true, y_pred):
         return float(np.sqrt(mean_squared_error(y_true, y_pred)))
@@ -128,6 +145,7 @@ class Evaluator:
         }
 
     def compare_approaches(self, cf_instance, cb_instance, kb_instance, test_ratings, products_df, k=5):
+        self.set_test_ratings(test_ratings)
         test_users = test_ratings["user_id"].unique()[:20]
 
         def cf_recommender(uid):

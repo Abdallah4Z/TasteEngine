@@ -270,9 +270,11 @@
                     tbody.appendChild(tr);
                     return;
                 }
+                const isBest = data.best_approach && row.approach === data.best_approach;
                 const tr = document.createElement('tr');
+                if (isBest) tr.className = 'best-row';
                 tr.innerHTML = `
-                    <td><strong>${row.approach}</strong></td>
+                    <td><strong>${row.approach}</strong> ${isBest ? '<span class="badge-best">BEST</span>' : ''}</td>
                     <td>${row['Precision@5']?.toFixed(4) || 'N/A'}</td>
                     <td>${row['Recall@5']?.toFixed(4) || 'N/A'}</td>
                 `;
@@ -286,16 +288,25 @@
             const methodLabels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
 
             if (data.best_cf_method) {
+                const best = data.cf_methods.find(r => r.method === data.best_cf_method);
+                const rmseVal = best ? best.RMSE.toFixed(4) : '—';
                 document.getElementById('analysisBestMethod').innerHTML =
-                    `<strong>${methodLabels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE among all CF methods. ` +
+                    `<strong>${methodLabels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE (${rmseVal}) among all CF methods. ` +
                     `SVD (Matrix Factorization) typically performs best because it captures latent factors in the user-item interaction matrix, ` +
                     `handling sparsity better than memory-based methods like User-Based or Item-Based CF.`;
             }
 
-            document.getElementById('analysisBestApproach').innerHTML =
-                `<strong>Collaborative Filtering</strong> generally performs best when sufficient rating data exists for a user. ` +
-                `Content-Based works well for new items but suffers from overspecialization. ` +
-                `Knowledge-Based excels in cold-start scenarios and when users have explicit constraints.`;
+            if (data.best_approach && data.approaches && data.approaches.length > 0) {
+                const best = data.approaches.find(a => a.approach === data.best_approach);
+                const precVal = best ? best['Precision@5'].toFixed(4) : '—';
+                document.getElementById('analysisBestApproach').innerHTML =
+                    `<strong>${data.best_approach}</strong> achieves the highest Precision@5 (${precVal}) on this dataset. ` +
+                    `Collaborative Filtering generally performs best when sufficient rating data exists. ` +
+                    `Content-Based works well for new items but suffers from overspecialization. ` +
+                    `Knowledge-Based excels in cold-start scenarios and when users have explicit constraints.`;
+            } else {
+                document.getElementById('analysisBestApproach').textContent = 'Run evaluation to compare approaches.';
+            }
 
             document.getElementById('analysisConditions').innerHTML = `
                 <b>• Dense user data:</b> Collaborative Filtering (leverages peer patterns)<br>
