@@ -405,14 +405,40 @@
       buildBestMethodAnalysis() {
         const best = this.cfData.find(r => r.method === this.bestCfMethod);
         if (!best) return 'Run evaluation to find out.';
-        return `<strong>${methodLabels[this.bestCfMethod] || this.bestCfMethod}</strong> achieves the lowest RMSE (${best.RMSE.toFixed(4)}) among all CF methods. SVD (Matrix Factorization) typically performs best because it captures latent factors in the user-item interaction matrix, handling sparsity better than memory-based methods.`;
+
+        const methodExplanations = {
+          user_based: 'simplicity and direct peer comparison — works well when the target user has enough similar neighbors.',
+          item_based: 'direct item-item similarity — effective on dense data where co-rated item pairs are plentiful.',
+          svd: 'latent factor modeling — captures hidden patterns in the user-item matrix, excelling on sparse, large-scale data.',
+          knn: 'nearest-neighbor aggregation — robust to noise, but performance depends on the quality of the neighbor set.',
+          slope_one: 'simplicity and speed of prediction — performs well when rating deviations are consistent across users.',
+        };
+        const why = methodExplanations[this.bestCfMethod] || 'strong performance on this dataset.';
+
+        return `<strong>${methodLabels[this.bestCfMethod] || this.bestCfMethod}</strong> achieves the lowest RMSE (${best.RMSE.toFixed(4)}) among all CF methods. ` +
+               `${methodLabels[this.bestCfMethod] || this.bestCfMethod} excels because of ${why}`;
       },
 
       buildBestApproachAnalysis(data) {
         if (!data.best_approach) return 'Run evaluation to find out.';
         const bestApp = data.approaches?.find(a => a.approach === data.best_approach);
         const precVal = bestApp ? bestApp['Precision@5'].toFixed(4) : '—';
-        return `<strong>${data.best_approach}</strong> achieves the highest Precision@5 (${precVal}) on this dataset. Collaborative Filtering generally performs best when sufficient rating data exists. Content-Based works well for new items but suffers from overspecialization. Knowledge-Based excels in cold-start scenarios and when users have explicit constraints.`;
+        const second = [...(data.approaches || [])].sort((a, b) => (b['Precision@5'] || 0) - (a['Precision@5'] || 0));
+        const runnerUp = second.length > 1 ? second[1].approach : null;
+
+        const explanations = {
+          'Collaborative Filtering': `strongest when rating data is dense (${this.cfData.length} methods averaged). Works by leveraging peer behavior patterns.`,
+          'Content-Based': `best when item features are informative (${data.approaches?.length || 0} approaches compared). Shines for cold-start items and niche categories where collaborative signals are weak.`,
+          'Knowledge-Based': `ideal for cold-start users with explicit constraints. Deterministic and transparent, but limited by the quality of hand-crafted rules.`,
+        };
+        const why = explanations[data.best_approach] || 'strong performance on this dataset.';
+
+        let text = `<strong>${data.best_approach}</strong> achieves the highest Precision@5 (${precVal}) on this dataset. ` +
+                   `${data.best_approach} performs ${why}`;
+        if (runnerUp) {
+          text += ` <strong>${runnerUp}</strong> follows as the runner-up.`;
+        }
+        return text;
       },
 
       animateCounter(obj, key, target, decimals = 4, duration = 800) {

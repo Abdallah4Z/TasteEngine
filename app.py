@@ -41,11 +41,6 @@ for _, u in users.iterrows():
 CATEGORIES = sorted(products["category"].unique().tolist())
 BRANDS = sorted(products["brand"].unique().tolist())
 
-for _ in cf_train.train_svd_generator():
-    pass
-for _ in cf_train.compute_slope_one_dev_generator():
-    pass
-
 APPROACHES = {
     "cf": {
         "label": "Collaborative Filtering",
