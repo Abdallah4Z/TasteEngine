@@ -6,6 +6,7 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 
 def load_data():
+    """Load all CSV data files (products, users, ratings) into DataFrames."""
     products = pd.read_csv(os.path.join(DATA_DIR, "products.csv"))
     users = pd.read_csv(os.path.join(DATA_DIR, "users.csv"))
     ratings = pd.read_csv(os.path.join(DATA_DIR, "ratings.csv"))
@@ -13,12 +14,22 @@ def load_data():
 
 
 def build_user_item_matrix(ratings_df):
+    """Pivot ratings table into user×item matrix (rows=users, columns=products, values=ratings).
+    
+    Unrated pairs are NaN — this sparse matrix is the foundation for collaborative filtering.
+    """
     return ratings_df.pivot_table(
         index="user_id", columns="product_id", values="rating"
     )
 
 
 def get_user_preferences(users_df, user_id):
+    """Extract a single user's profile as a dictionary.
+    
+    Returns preferred_categories (set), budget_min/max (float),
+    favorite_brands (set), name (str), and age (int).
+    Returns empty dict if user not found.
+    """
     user = users_df[users_df["user_id"] == user_id]
     if user.empty:
         return {}

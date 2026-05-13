@@ -75,6 +75,7 @@ APPROACHES = {
 
 
 def get_product_info(product_id):
+    """Lookup a product by ID and return a formatted dict with all fields."""
     row = products[products["product_id"] == product_id]
     if row.empty:
         return None
@@ -93,6 +94,7 @@ def get_product_info(product_id):
 
 @app.route("/")
 def index():
+    """Landing page with user selector and approach overview."""
     return render_template("index.html",
                            active_page="home",
                            users=USER_OPTIONS,
@@ -103,6 +105,7 @@ def index():
 
 @app.route("/recommend")
 def recommend_page():
+    """Recommendation page with approach/method selection and product grid."""
     return render_template("recommend.html",
                            active_page="recommend",
                            users=USER_OPTIONS,
@@ -113,6 +116,7 @@ def recommend_page():
 
 @app.route("/evaluate")
 def evaluate_page():
+    """Evaluation dashboard with tables, charts, and reasoning analysis."""
     return render_template("evaluation.html",
                            active_page="evaluate",
                            users=USER_OPTIONS,
@@ -123,17 +127,20 @@ def evaluate_page():
 
 @app.route("/api/users")
 def api_users():
+    """List all users with their profile data (name, age, categories, budget, brands)."""
     return jsonify(USER_OPTIONS)
 
 
 @app.route("/api/user/<int:user_id>")
 def api_user(user_id):
+    """Get a single user's preferences."""
     prefs = get_user_preferences(users, user_id)
     return jsonify(prefs)
 
 
 @app.route("/api/products")
 def api_products():
+    """List all products, optionally filtered by category."""
     cat = request.args.get("category")
     if cat:
         filtered = products[products["category"] == cat]
@@ -146,12 +153,19 @@ def api_products():
 
 
 def get_user_rated_items(user_id):
+    """Get product IDs the user rated >= 3.5 (their 'liked' items for content-based)."""
     user_ratings = ratings[ratings["user_id"] == user_id]
     return user_ratings[user_ratings["rating"] >= 3.5]["product_id"].tolist()
 
 
 @app.route("/api/recommend", methods=["POST"])
 def api_recommend():
+    """Core recommendation endpoint.
+    
+    Accepts: user_id, approach (cf|content|knowledge), method, n (count).
+    Returns: list of {product info, score, explanation}.
+    Routes to the appropriate engine (CF, CB, or KB) and generates explanations.
+    """
     data = request.json
     user_id = data.get("user_id")
     approach = data.get("approach")
@@ -216,6 +230,15 @@ def api_recommend():
 
 
 def _generate_analysis(cf_results, approach_results, best_cf, best_approach):
+    """Generate data-driven analysis text for the evaluation page.
+    
+    Examines actual metrics to produce dynamic reasoning for:
+    - Which CF method performed best and why
+    - Which approach performed best and why
+    - Under what conditions each excels
+    - Why algorithmic differences exist
+    Uses real metric values (not hardcoded text) for the explanations.
+    """
     analysis = {}
 
     method_labels = {
@@ -308,6 +331,12 @@ def _generate_analysis(cf_results, approach_results, best_cf, best_approach):
 
 @app.route("/api/evaluate")
 def api_evaluate():
+    """Full evaluation endpoint.
+    
+    Runs all 5 CF methods + all 3 approaches across test users.
+    Returns: cf_methods (6 metrics each), best_cf_method, approaches
+    (3 approaches compared), best_approach, and analysis (data-driven text).
+    """
     try:
         cf_results = evaluator.compare_cf_methods(cf_train, TEST, k=5)
         best_cf = None
@@ -390,6 +419,7 @@ CF_METHOD_LABELS = {
 
 @app.route("/api/evaluate/cf/<method>")
 def api_evaluate_cf(method):
+    """Evaluate a single CF method. Returns all 6 metrics."""
     if method not in CF_METHOD_NAMES:
         return jsonify({"error": f"Unknown CF method: {method}"}), 400
     try:
@@ -401,6 +431,11 @@ def api_evaluate_cf(method):
 
 @app.route("/api/evaluate/cf/<method>/stream")
 def api_evaluate_cf_stream(method):
+    """Streamed evaluation for slow CF methods (SVD, Slope One).
+    
+    Returns NDJSON with progress events, then the result.
+    Allows the frontend to show a progress bar during long evaluations.
+    """
     if method not in ("svd", "slope_one"):
         return jsonify({"error": f"Streaming not supported for {method}"}), 400
 
@@ -429,6 +464,7 @@ def api_evaluate_cf_stream(method):
 
 @app.route("/api/evaluate/approaches")
 def api_evaluate_approaches():
+    """Evaluate all 3 approaches (CF, Content-Based, Knowledge-Based) with Precision@5 and Recall@5."""
     try:
         evaluator.set_test_ratings(TEST)
         test_users = TEST["user_id"].unique()[:20]
@@ -498,6 +534,11 @@ def api_evaluate_approaches():
 
 @app.route("/api/products/filter")
 def api_products_filter():
+    """Advanced product search/filter endpoint.
+    
+    Supports filtering by: category, brand, price_min, price_max, text search (q).
+    Returns matching products with total count.
+    """
     cat = request.args.get("category")
     brand = request.args.get("brand")
     price_min = request.args.get("price_min", type=float)
@@ -549,6 +590,11 @@ def api_update_preferences(user_id):
 
 @app.route("/api/users", methods=["POST"])
 def api_create_user():
+    """Create a new user with profile data (name, age, categories, brands, budget).
+    
+    Saves to users.csv for persistence across restarts.
+    Returns the new user_id.
+    """
     global users
     data = request.json
     new_id = int(users["user_id"].max() + 1)
@@ -578,6 +624,7 @@ def api_create_user():
 
 @app.route("/create")
 def create_user_page():
+    """Create-user page with two-step flow: profile form → rate 5 products → auto-generate ratings."""
     return render_template("create.html",
                            categories=CATEGORIES,
                            brands=BRANDS,
@@ -586,6 +633,11 @@ def create_user_page():
 
 @app.route("/api/create/step1", methods=["POST"])
 def api_create_step1():
+    """Create user and optionally save ratings (step 1 of create-user flow).
+    
+    If 'ratings' are provided, auto-generates additional ratings to reach ~40 total.
+    Saves both user and ratings to CSV for persistence.
+    """
     global users
     data = request.json
     new_id = int(users["user_id"].max() + 1)
@@ -620,6 +672,17 @@ def api_create_step1():
 
 
 def _save_and_generate_ratings(user_id, user_cats, user_brands, budget_min, budget_max, manual_ratings):
+    """Save user's 5 manual ratings + auto-generate ~35 more using profile matching.
+    
+    Uses the same rating logic as generate_data.py:
+    - Base = 3.0
+    - Category match: +0.5 to +1.5
+    - Brand match: +0.3 to +1.0
+    - Budget fit: +0.0 to +0.5 (penalty if outside: -0.0 to -0.5)
+    - Similarity boost: random -0.3 to +0.5
+    - Noise: Normal(0, 0.5)
+    Final rating clamped to [1.0, 5.0]. Target is ~40 ratings total.
+    """
     global ratings
     seed_ids = [r["product_id"] for r in manual_ratings]
     seed_ratings = {r["product_id"]: r["rating"] for r in manual_ratings}
@@ -732,6 +795,7 @@ def htmx_recommend():
 
 
 def get_category_icon(category):
+    """Map product category to emoji icon for UI display."""
     icons = {
         "Electronics": "💻", "Clothing": "👕", "Home & Kitchen": "🏠",
         "Books": "📚", "Sports": "⚽", "Beauty": "💄", "Toys": "🧸", "Automotive": "🚗"
@@ -740,9 +804,11 @@ def get_category_icon(category):
 
 
 def stars_html(rating):
+    """Generate HTML star rating display (filled ★ and empty ☆) from numeric rating."""
     f = int(rating)
     return "★" * f + "☆" * (5 - f)
 
 
 if __name__ == "__main__":
+    """Start the Flask development server on port 5000."""
     app.run(debug=True, host="0.0.0.0", port=5000)

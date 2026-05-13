@@ -1,5 +1,13 @@
 class Explainer:
+    """Generates human-readable explanations for every recommendation.
+    
+    Customizes explanations by approach (CF, Content-Based, Knowledge-Based)
+    and by method within each approach. Uses product attributes (category,
+    brand, price) and user preferences to create specific, meaningful text.
+    """
+
     def __init__(self, products_df, users_df):
+        """Pre-build lookup caches for O(1) access to product and user data."""
         self.products = products_df
         self.users = users_df
         self._product_cache = {}
@@ -10,12 +18,15 @@ class Explainer:
             self._user_cache[row["user_id"]] = row
 
     def _get_product(self, product_id):
+        """Fast product lookup from cache."""
         return self._product_cache.get(product_id, {})
 
     def _get_user(self, user_id):
+        """Fast user lookup from cache."""
         return self._user_cache.get(user_id, {})
 
     def _fmt_score(self, score):
+        """Convert numeric score (0-1) to verbal label: Excellent/Strong/Good/Moderate/Partial."""
         if score >= 0.9:
             return "Excellent match"
         elif score >= 0.7:
@@ -28,6 +39,7 @@ class Explainer:
             return "Partial match"
 
     def _pref_list(self, user, key):
+        """Extract user preferences as a clean list (handles CSV string or set)."""
         raw = user.get(key, "")
         if raw is None or isinstance(raw, float):
             return []
@@ -36,6 +48,7 @@ class Explainer:
         return list(raw)[:2] if raw else []
 
     def explain_cf(self, method, user_id, product_id, details=None):
+        """Generate CF explanation. Templates vary by method (user_based, item_based, svd, knn, slope_one)."""
         product = self._get_product(product_id)
         user = self._get_user(user_id)
         pname = product.get("name", f"Item #{product_id}")
@@ -56,6 +69,7 @@ class Explainer:
         return templates.get(method, f"Recommended based on collaborative filtering")
 
     def explain_content(self, method, user_id, product_id, details=None):
+        """Generate Content-Based explanation. Templates for tfidf and feature_match."""
         product = self._get_product(product_id)
         user = self._get_user(user_id)
         pname = product.get("name", f"Item #{product_id}")
@@ -73,6 +87,7 @@ class Explainer:
         return templates.get(method, f"Recommended based on item features")
 
     def explain_knowledge(self, method, user_id, product_id, details=None):
+        """Generate Knowledge-Based explanation. Templates for constraint, rule, utility."""
         product = self._get_product(product_id)
         user = self._get_user(user_id)
         details = details or {}
@@ -90,6 +105,7 @@ class Explainer:
         return templates.get(method, f"Recommended based on your requirements")
 
     def get_explanation(self, approach, method, user_id, product_id, details=None):
+        """Universal router: delegates to the appropriate explain method by approach."""
         if approach == "cf":
             return self.explain_cf(method, user_id, product_id, details)
         elif approach == "content":

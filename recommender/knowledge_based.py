@@ -3,10 +3,24 @@ import pandas as pd
 
 
 class KnowledgeBasedRecommender:
+    """Knowledge-Based recommendation engine.
+    
+    Uses explicit domain knowledge, rules, and constraints rather than
+    statistical patterns. Includes constraint-based filtering, rule-based
+    cross-selling, and multi-attribute utility scoring.
+    """
+
     def __init__(self, products_df):
+        """Store product catalog for filtering and scoring."""
         self.products = products_df.copy()
 
     def constraint_based(self, constraints, n_recommendations=10):
+        """Constraint-based filtering.
+        
+        Sequentially filters products by user constraints (budget, category,
+        brand, min_rating, subcategory). Products matching ALL hard constraints
+        are sorted by avg_rating. Works with zero user history.
+        """
         filtered = self.products.copy()
 
         if "budget_max" in constraints:
@@ -34,6 +48,12 @@ class KnowledgeBasedRecommender:
         return results
 
     def rule_based(self, context, n_recommendations=10):
+        """Rule-based recommendation with domain business rules.
+        
+        Uses pre-defined cross-selling rules (e.g., laptop buyers also buy
+        accessories). Scores products based on interaction context, preferred
+        categories, budget, and brand preferences. Mimics real-world e-commerce.
+        """
         rules = {
             "laptop": {"category": "Electronics", "subcategory": "Laptops"},
             "smartphone": {"category": "Electronics", "subcategory": "Smartphones"},
@@ -69,6 +89,15 @@ class KnowledgeBasedRecommender:
         return scores[:n_recommendations]
 
     def utility_based(self, preferences, weights=None, n_recommendations=10):
+        """Multi-attribute utility-based recommendation.
+        
+        Computes a weighted utility score for each product:
+        - Price utility: closeness to midpoint of user's budget (20%)
+        - Category utility: matches preferred categories? (30%)
+        - Brand utility: matches favorite brands? (20%)
+        - Rating utility: normalized product rating (30%)
+        Returns top-N products by total utility.
+        """
         if weights is None:
             weights = {"price": 0.2, "category": 0.3, "brand": 0.2, "rating": 0.3}
 
@@ -107,6 +136,7 @@ class KnowledgeBasedRecommender:
         return scores[:n_recommendations]
 
     def recommend(self, method, constraints=None, context=None, preferences=None, n_recommendations=10):
+        """Router: dispatches to the appropriate knowledge-based method."""
         if method == "constraint":
             return self.constraint_based(constraints or {}, n_recommendations)
         elif method == "rule":

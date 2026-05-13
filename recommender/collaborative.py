@@ -5,7 +5,19 @@ from utils.helpers import build_user_item_matrix
 
 
 class CollaborativeFiltering:
+    """Collaborative filtering engine with 5 recommendation methods.
+    
+    Uses a user-item rating matrix to find patterns and predict ratings
+    for unseen products. Supports user-based, item-based, SVD (matrix
+    factorization), KNN-based, and Slope One approaches.
+    """
+
     def __init__(self, ratings_df):
+        """Initialize with ratings DataFrame.
+        
+        Builds the user×item pivot matrix, stores user/item ID mappings,
+        and pre-computes user means and global mean for fallback.
+        """
         self.ratings = ratings_df
         self.matrix = build_user_item_matrix(ratings_df)
         self.user_item_matrix = self.matrix.values
@@ -17,14 +29,21 @@ class CollaborativeFiltering:
         self.global_mean = np.nanmean(self.user_item_matrix)
 
     def _get_user_index(self, user_id):
+        """Map external user_id to internal matrix row index."""
         indices = np.where(self.user_ids == user_id)[0]
         return indices[0] if len(indices) > 0 else None
 
     def _get_item_index(self, item_id):
+        """Map external product_id to internal matrix column index."""
         indices = np.where(self.item_ids == item_id)[0]
         return indices[0] if len(indices) > 0 else None
 
     def user_based_cf(self, user_id, n_recommendations=10, k=20):
+        """User-Based Collaborative Filtering.
+        
+        Finds top-k most similar users via cosine similarity, then predicts
+        ratings for unseen items as a similarity-weighted average of neighbors' ratings.
+        """
         u_idx = self._get_user_index(user_id)
         if u_idx is None:
             return []
@@ -57,6 +76,13 @@ class CollaborativeFiltering:
         return predictions[:n_recommendations]
 
     def item_based_cf(self, user_id, n_recommendations=10, k=15):
+        """Item-Based Collaborative Filtering.
+        
+        Computes adjusted cosine similarity between items. For each unrated item,
+        finds top-k most similar items among the user's rated set and predicts
+        rating as a similarity-weighted average. Item-item similarities are more
+        stable than user-user similarities.
+        """
         u_idx = self._get_user_index(user_id)
         if u_idx is None:
             return []
@@ -86,6 +112,13 @@ class CollaborativeFiltering:
         return predictions[:n_recommendations]
 
     def svd(self, user_id, n_recommendations=10, n_factors=20, n_epochs=15, lr=0.01, reg=0.02):
+        """Matrix Factorization via Stochastic Gradient Descent (SVD).
+        
+        Decomposes the user-item matrix into latent user factors (P) and item
+        factors (Q). Learns bias terms for users (bu) and items (bi). Uses SGD
+        to minimize prediction error on observed ratings, then predicts unrated
+        items via: r̂ = μ + bu[u] + bi[i] + P[u]·Q[i].
+        """
         u_idx = self._get_user_index(user_id)
         if u_idx is None:
             return []
@@ -129,6 +162,12 @@ class CollaborativeFiltering:
         return predictions[:n_recommendations]
 
     def knn_cf(self, user_id, n_recommendations=10, k=10):
+        """KNN-Based Collaborative Filtering.
+        
+        Uses scikit-learn's NearestNeighbors with cosine metric to find the k
+        nearest neighbors. Predicts ratings as inverse-distance-weighted averages
+        of neighbor ratings. Non-parametric and adapts to local structure.
+        """
         u_idx = self._get_user_index(user_id)
         if u_idx is None:
             return []
@@ -161,6 +200,13 @@ class CollaborativeFiltering:
         return predictions[:n_recommendations]
 
     def slope_one(self, user_id, n_recommendations=10):
+        """Slope One Collaborative Filtering.
+        
+        For each pair of items (i,j), computes the average rating deviation
+        across all users who rated both. Predicts a user's rating for item i
+        by averaging (user_rating_j + dev[i,j]) across all items j the user
+        has rated. Simple, fast, no training required.
+        """
         u_idx = self._get_user_index(user_id)
         if u_idx is None:
             return []
@@ -195,6 +241,10 @@ class CollaborativeFiltering:
         return predictions[:n_recommendations]
 
     def recommend(self, method, user_id, n_recommendations=10, **kwargs):
+        """Router: dispatches to the appropriate CF method by name.
+        
+        Supported methods: user_based, item_based, svd, knn, slope_one.
+        """
         methods = {
             "user_based": self.user_based_cf,
             "item_based": self.item_based_cf,
@@ -208,4 +258,5 @@ class CollaborativeFiltering:
         return func(user_id, n_recommendations=n_recommendations, **kwargs)
 
     def get_all_methods(self):
+        """Return all supported CF method names."""
         return ["user_based", "item_based", "svd", "knn", "slope_one"]

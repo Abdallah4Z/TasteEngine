@@ -5,7 +5,19 @@ from utils.helpers import load_data
 
 
 class ContentBasedRecommender:
+    """Content-Based recommendation engine.
+    
+    Recommends products by comparing their features (category, subcategory,
+    brand, name) against what the user has liked before (TF-IDF) or against
+    the user's explicit preferences (feature matching).
+    """
+
     def __init__(self, products_df):
+        """Build TF-IDF matrix from product text features.
+        
+        Combines category, subcategory, brand, and name into a single text
+        field, then vectorizes with TF-IDF (English stop words removed).
+        """
         self.products = products_df.copy()
         self.products["text_features"] = (
             self.products["category"].fillna("") + " " +
@@ -18,6 +30,12 @@ class ContentBasedRecommender:
         self.product_ids = self.products["product_id"].values
 
     def tfidf_recommend(self, user_profile_items, n_recommendations=10):
+        """TF-IDF based recommendation.
+        
+        Takes products the user rated highly (≥3.5), averages their TF-IDF
+        vectors into a user profile, then finds the most similar unrated
+        products via cosine similarity. Excludes already-rated items.
+        """
         if not user_profile_items:
             return []
 
@@ -46,6 +64,14 @@ class ContentBasedRecommender:
         return results
 
     def feature_match_recommend(self, preferences, n_recommendations=10):
+        """Feature matching recommendation.
+        
+        Scores every product based on explicit preference matching:
+        - Category match: +40 points
+        - Brand match: +30 points
+        - Budget fit: +20 points
+        Works with zero user history (cold-start).
+        """
         preferred_cats = preferences.get("preferred_categories", set())
         favorite_brands = preferences.get("favorite_brands", set())
         budget_min = preferences.get("budget_min", 0)
@@ -66,6 +92,7 @@ class ContentBasedRecommender:
         return scores[:n_recommendations]
 
     def recommend(self, method, user_profile_items=None, preferences=None, n_recommendations=10):
+        """Router: dispatches to the appropriate content-based method."""
         if method == "tfidf":
             return self.tfidf_recommend(user_profile_items or [], n_recommendations)
         elif method == "feature_match":

@@ -16,8 +16,10 @@ CATEGORIES = {
     "Toys": ["Educational", "Action Figures", "Board Games", "Dolls", "Puzzles"],
     "Automotive": ["Car Care", "Interior", "Exterior", "Tools", "Electronics"],
 }
+"""Product taxonomy: 8 categories, each with 5 subcategories."""
 
 BRANDS_BY_CATEGORY = {
+    """Brand pools per category. Products get assigned a random brand from their category's pool."""
     "Electronics": ["Samsung", "Apple", "Sony", "LG", "Dell", "HP", "Bose", "Canon"],
     "Clothing": ["Nike", "Adidas", "Zara", "H&M", "Levi's", "Puma", "Under Armour"],
     "Home & Kitchen": ["IKEA", "KitchenAid", "Ninja", "Dyson", "OXO", "Cuisinart"],
@@ -89,6 +91,11 @@ PRODUCT_NAMES = {
 
 
 def generate_products(n_per_category=8):
+    """Generate product catalog: 8 cats × 5 subcats × ~5 products = ~200 products.
+    
+    Each product gets: name, category, subcategory, random brand (from cat pool),
+    random price ($10-$1500), random avg_rating (3.0-5.0), random num_reviews (10-500).
+    """
     products = []
     pid = 1
     for category, subcategories in CATEGORIES.items():
@@ -117,6 +124,12 @@ def generate_products(n_per_category=8):
 
 
 def generate_users(n_users=200):
+    """Generate user profiles with preferences.
+    
+    Each user gets: name (random + ID), age (18-65), 1-3 preferred categories,
+    budget range ($10-$1700), 0-2 favorite brands. Preferences are stored as
+    comma-separated strings in CSV.
+    """
     first_names = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace",
                    "Henry", "Ivy", "Jack", "Kate", "Leo", "Mia", "Noah", "Olivia",
                    "Paul", "Quinn", "Rachel", "Sam", "Tina", "Uma", "Victor", "Wendy",
@@ -145,6 +158,16 @@ def generate_users(n_users=200):
 
 
 def generate_ratings(products_df, users_df, n_ratings=5000, sparsity_factor=0.05):
+    """Generate user-product ratings with realistic preference modeling.
+    
+    Each rating base=3.0, then adjusted:
+    - Category match: +0.5 to +1.5
+    - Brand match: +0.3 to +1.0
+    - Budget fit: +0.0 to +0.5 (penalty if outside: -0.0 to -0.5)
+    - Random noise: Normal(0, 0.5)
+    Final rating clamped to [1.0, 5.0]
+    Creates 8000 ratings by default from 200×200=40000 possible pairs.
+    """
     ratings = []
     n_users = len(users_df)
     n_products = len(products_df)
@@ -200,6 +223,10 @@ def generate_ratings(products_df, users_df, n_ratings=5000, sparsity_factor=0.05
 
 
 def generate_interactions(products_df, users_df, rating_df, n_purchases=2000):
+    """Generate synthetic purchase interactions from a sample of ratings.
+    
+    Each interaction has: user_id, product_id, purchased=True, quantity (1-3).
+    """
     interactions = []
     selected = rating_df.sample(min(n_purchases, len(rating_df)))
     for _, row in selected.iterrows():
@@ -213,6 +240,7 @@ def generate_interactions(products_df, users_df, rating_df, n_purchases=2000):
 
 
 def main():
+    """Orchestrator: generates all data files (products, users, ratings, interactions)."""
     print("Generating products...")
     products = generate_products(n_per_category=8)
     products.to_csv(os.path.join(DATA_DIR, "products.csv"), index=False)

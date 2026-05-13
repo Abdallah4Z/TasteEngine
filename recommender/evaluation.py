@@ -4,15 +4,25 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 
 class Evaluator:
+    """Comprehensive evaluation suite for recommendation methods.
+    
+    Provides 6 metrics: RMSE, MAE, Precision@k, Recall@k, F1@k, Coverage.
+    Supports comparing CF methods against each other and evaluating
+    different approaches (CF vs Content-Based vs Knowledge-Based).
+    """
+
     def __init__(self, ratings_df, predictions_df=None):
+        """Initialize with full ratings dataset."""
         self.ratings = ratings_df
         self.predictions = predictions_df
         self._test_ratings = None
 
     def set_test_ratings(self, test_ratings):
+        """Set the held-out test set for evaluation."""
         self._test_ratings = test_ratings
 
     def _get_relevant_for_user(self, user_id, rating_threshold=3.5):
+        """Get ground-truth relevant items for a user (ratings ≥ threshold in test set)."""
         if self._test_ratings is not None:
             relevant = self._test_ratings[
                 (self._test_ratings["user_id"] == user_id) &
@@ -26,33 +36,45 @@ class Evaluator:
         return relevant
 
     def rmse(self, y_true, y_pred):
+        """Root Mean Squared Error — penalizes large errors quadratically. Lower is better."""
         return float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
     def mae(self, y_true, y_pred):
+        """Mean Absolute Error — average absolute difference. Lower is better."""
         return float(mean_absolute_error(y_true, y_pred))
 
     def precision_at_k(self, recommended_items, relevant_items, k=5):
+        """Of top-k recommended items, how many are relevant? Range [0,1], higher is better."""
         top_k = recommended_items[:k]
         hits = len(set(top_k) & set(relevant_items))
         return hits / k if k > 0 else 0
 
     def recall_at_k(self, recommended_items, relevant_items, k=5):
+        """Of all relevant items, how many appear in top-k? Range [0,1], higher is better."""
         top_k = recommended_items[:k]
         hits = len(set(top_k) & set(relevant_items))
         return hits / len(relevant_items) if len(relevant_items) > 0 else 0
 
     def f1_at_k(self, recommended_items, relevant_items, k=5):
+        """Harmonic mean of Precision@k and Recall@k. Range [0,1], higher is better."""
         p = self.precision_at_k(recommended_items, relevant_items, k)
         r = self.recall_at_k(recommended_items, relevant_items, k)
         return 2 * p * r / (p + r) if (p + r) > 0 else 0
 
     def coverage(self, recommended_items_list, total_items):
+        """Fraction of total product catalog recommended to at least one user. Higher is better."""
         recommended_set = set()
         for items in recommended_items_list:
             recommended_set.update(items)
         return len(recommended_set) / total_items if total_items > 0 else 0
 
     def evaluate_cf_method(self, method_name, cf_instance, test_ratings, k=5, rating_threshold=3.5, max_users=20):
+        """Full evaluation of a single CF method.
+        
+        For each test user: gets recommendations, compares predicted ratings
+        to actual (→ RMSE, MAE), checks top-k relevance (→ Precision, Recall,
+        F1), and measures catalog coverage. Returns dict with all 6 metrics.
+        """
         y_true = []
         y_pred = []
 
@@ -109,6 +131,7 @@ class Evaluator:
         }
 
     def compare_cf_methods(self, cf_instance, test_ratings, k=5):
+        """Evaluate all 5 CF methods and return comparison list."""
         methods = cf_instance.get_all_methods()
         results = []
         for method in methods:
@@ -120,6 +143,8 @@ class Evaluator:
         return results
 
     def evaluate_approach(self, approach_name, recommender_fn, test_users, products_df, k=5):
+        """Evaluate a recommendation approach by computing Precision@k, Recall@k, and Coverage."""
+
         all_recommended = []
         precisions = []
         recalls = []
@@ -145,6 +170,8 @@ class Evaluator:
         }
 
     def compare_approaches(self, cf_instance, cb_instance, kb_instance, test_ratings, products_df, k=5):
+        """Compare all 3 approaches (CF, Content-Based, Knowledge-Based) on test users."""
+
         self.set_test_ratings(test_ratings)
         test_users = test_ratings["user_id"].unique()[:20]
 
