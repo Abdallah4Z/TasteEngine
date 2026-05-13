@@ -169,6 +169,54 @@ class Evaluator:
             "Coverage": self.coverage(all_recommended, len(products_df)),
         }
 
+    def evaluate_any_method(self, method_name, approach, recommender_fn, test_ratings, k=5, rating_threshold=3.5, max_users=20):
+        """Evaluate any recommendation method with Precision@k, Recall@k, F1@k, Coverage.
+
+        RMSE and MAE are set to None (only meaningful for CF methods that
+        predict ratings on a 1-5 scale; CB/KB methods return arbitrary scores).
+        """
+        all_recommended = []
+        user_ids = test_ratings["user_id"].unique()[:max_users]
+
+        for user_id in user_ids:
+            try:
+                recs = recommender_fn(user_id)
+            except Exception:
+                recs = []
+            rec_items = [r[0] for r in recs]
+            all_recommended.append(rec_items)
+
+        user_precisions, user_recalls, user_f1s = [], [], []
+        for i, user_id in enumerate(user_ids):
+            relevant = test_ratings[
+                (test_ratings["user_id"] == user_id) &
+                (test_ratings["rating"] >= rating_threshold)
+            ]["product_id"].tolist()
+            if not relevant or i >= len(all_recommended):
+                continue
+            rec_items = all_recommended[i]
+            user_precisions.append(self.precision_at_k(rec_items, relevant, k))
+            user_recalls.append(self.recall_at_k(rec_items, relevant, k))
+            user_f1s.append(self.f1_at_k(rec_items, relevant, k))
+
+        total_items = len(self.ratings["product_id"].unique()) if hasattr(self, "ratings") else None
+        if total_items is None:
+            all_pids = set()
+            for items in all_recommended:
+                all_pids.update(items)
+            total_items = len(all_pids) or 1
+
+        return {
+            "method": method_name,
+            "approach": approach,
+            "RMSE": None,
+            "MAE": None,
+            f"Precision@{k}": round(np.mean(user_precisions), 4) if user_precisions else 0,
+            f"Recall@{k}": round(np.mean(user_recalls), 4) if user_recalls else 0,
+            f"F1@{k}": round(np.mean(user_f1s), 4) if user_f1s else 0,
+            "Coverage": self.coverage(all_recommended, total_items),
+        }
+
     def compare_approaches(self, cf_instance, cb_instance, kb_instance, test_ratings, products_df, k=5):
         """Compare all 3 approaches (CF, Content-Based, Knowledge-Based) on test users."""
 

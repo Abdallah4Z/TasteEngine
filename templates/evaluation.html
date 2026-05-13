@@ -8,6 +8,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .approach-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:600; margin-left:6px; vertical-align:middle; }
+        .approach-cf { background:rgba(108,99,255,0.25); color:#9d97ff; }
+        .approach-cb { background:rgba(0,200,117,0.25); color:#4ade80; }
+        .approach-kb { background:rgba(255,165,0,0.25); color:#fbbf24; }
+        .row-cf { border-left: 3px solid #6C63FF; }
+        .row-cb { border-left: 3px solid #22c55e; }
+        .row-kb { border-left: 3px solid #f59e0b; }
+        .metric-na { color:rgba(255,255,255,0.25); font-style:italic; }
+        .best-badge-all { background:#22c55e; color:#fff; padding:2px 8px; border-radius:8px; font-size:0.7rem; font-weight:600; }
+        .all-chart-container { height:300px; margin-top:16px; }
+    </style>
 </head>
 <body>
     <nav class="nav">
@@ -23,7 +35,7 @@
     <div class="container">
         <div class="glass">
             <h2 class="glass-header">Evaluation & Comparison Dashboard</h2>
-            <p class="hero-text">Comprehensive analysis of all recommendation methods and approaches using 6 evaluation metrics.</p>
+            <p class="hero-text">Comprehensive analysis of all recommendation methods and approaches — 10 methods across 3 approaches, 6 evaluation metrics each.</p>
             <div class="mt-2">
                 <button class="btn btn-primary" onclick="runEvaluation()">▶️ Run Evaluation</button>
             </div>
@@ -37,7 +49,40 @@
         <div id="evalResults" class="hidden">
 
             <div class="glass">
-                <h2 class="glass-header">🤝 Collaborative Filtering — Method Comparison</h2>
+                <h2 class="glass-header"> All Methods Comparison</h2>
+                <p class="hero-text" style="font-size:0.85rem;margin-top:4px;">
+                    <span class="approach-badge approach-cf">CF</span> Collaborative Filtering &nbsp;
+                    <span class="approach-badge approach-cb">CB</span> Content-Based &nbsp;
+                    <span class="approach-badge approach-kb">KB</span> Knowledge-Based
+                </p>
+                <div style="overflow-x: auto;">
+                    <table class="eval-table" id="allTable">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>RMSE ↓</th>
+                                <th>MAE ↓</th>
+                                <th>Precision@5 ↑</th>
+                                <th>Recall@5 ↑</th>
+                                <th>F1@5 ↑</th>
+                                <th>Coverage ↑</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allTableBody">
+                            <tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);">Click "Run Evaluation" to see results</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="bestAllBadge" class="mt-2 hidden">
+                    <span class="badge-best"> Best Overall Method: <span id="bestAllName"></span></span>
+                </div>
+                <div class="mt-2 all-chart-container">
+                    <canvas id="allChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass">
+                <h2 class="glass-header">🤝 Collaborative Filtering — Method Detail</h2>
                 <div style="overflow-x: auto;">
                     <table class="eval-table" id="cfTable">
                         <thead>
@@ -57,9 +102,8 @@
                     </table>
                 </div>
                 <div id="bestCfBadge" class="mt-2 hidden">
-                    <span class="badge-best">🏆 Best CF Method: <span id="bestCfName"></span></span>
+                    <span class="badge-best"> Best CF Method: <span id="bestCfName"></span></span>
                 </div>
-
                 <div class="mt-2 chart-container">
                     <canvas id="cfChart"></canvas>
                 </div>
@@ -112,6 +156,20 @@
 
     <script>
         let cfChartInstance = null;
+        let allChartInstance = null;
+
+        const methodLabels = {
+            user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD',
+            knn: 'KNN', slope_one: 'Slope One',
+            tfidf: 'TF-IDF Similarity', feature_match: 'Feature Matching',
+            constraint: 'Constraint-Based', rule: 'Rule-Based', utility: 'Utility-Based'
+        };
+        const approachLabels = { cf: 'CF', content: 'CB', knowledge: 'KB' };
+
+        function fmt(val) {
+            if (val === null || val === undefined) return '<span class="metric-na">—</span>';
+            return Number(val).toFixed(4);
+        }
 
         function runEvaluation() {
             document.getElementById('evalLoading').classList.remove('hidden');
@@ -124,11 +182,13 @@
                 document.getElementById('evalResults').classList.remove('hidden');
 
                 if (data.error) {
-                    document.getElementById('cfTableBody').innerHTML =
+                    document.getElementById('allTableBody').innerHTML =
                         `<tr><td colspan="7" style="text-align:center;color:#FF6584;">Error: ${data.error}</td></tr>`;
                     return;
                 }
 
+                renderAllTable(data);
+                renderAllChart(data);
                 renderCfTable(data);
                 renderCfChart(data);
                 renderApproachTable(data);
@@ -137,8 +197,134 @@
             .catch(err => {
                 document.getElementById('evalLoading').classList.add('hidden');
                 document.getElementById('evalResults').classList.remove('hidden');
-                document.getElementById('cfTableBody').innerHTML =
+                document.getElementById('allTableBody').innerHTML =
                     `<tr><td colspan="7" style="text-align:center;color:#FF6584;">Error: ${err.message}</td></tr>`;
+            });
+        }
+
+        function approachClass(approach) {
+            return approach === 'cf' ? 'row-cf' : approach === 'content' ? 'row-cb' : 'row-kb';
+        }
+        function approachBadge(approach) {
+            const lab = approachLabels[approach] || approach.toUpperCase();
+            const cls = approach === 'cf' ? 'approach-cf' : approach === 'content' ? 'approach-cb' : 'approach-kb';
+            return `<span class="approach-badge ${cls}">${lab}</span>`;
+        }
+
+        function renderAllTable(data) {
+            const tbody = document.getElementById('allTableBody');
+            tbody.innerHTML = '';
+
+            if (!data.all_methods || data.all_methods.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);">No methods evaluated</td></tr>`;
+                return;
+            }
+
+            data.all_methods.forEach(row => {
+                if (row.error) {
+                    const tr = document.createElement('tr');
+                    tr.className = approachClass(row.approach);
+                    tr.innerHTML = `<td>${methodLabels[row.method] || row.method} ${approachBadge(row.approach)}</td><td colspan="6" style="color:#FF6584;">Error: ${row.error}</td>`;
+                    tbody.appendChild(tr);
+                    return;
+                }
+
+                const isBest = data.best_all_method && row.method === data.best_all_method;
+                const tr = document.createElement('tr');
+                tr.className = approachClass(row.approach);
+                if (isBest) tr.className += ' best-row';
+                tr.innerHTML = `
+                    <td><strong>${methodLabels[row.method] || row.method}</strong> ${approachBadge(row.approach)} ${isBest ? '<span class="best-badge-all">BEST</span>' : ''}</td>
+                    <td>${fmt(row.RMSE)}</td>
+                    <td>${fmt(row.MAE)}</td>
+                    <td>${fmt(row['Precision@5'])}</td>
+                    <td>${fmt(row['Recall@5'])}</td>
+                    <td>${fmt(row['F1@5'])}</td>
+                    <td>${fmt(row.Coverage)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (data.best_all_method) {
+                document.getElementById('bestAllBadge').classList.remove('hidden');
+                const label = methodLabels[data.best_all_method] || data.best_all_method;
+                const bestRow = data.all_methods.find(r => r.method === data.best_all_method);
+                const prec = bestRow ? bestRow['Precision@5'] : '—';
+                document.getElementById('bestAllName').textContent =
+                    `${label} (Precision@5: ${prec})`;
+            }
+        }
+
+        function renderAllChart(data) {
+            if (!data.all_methods || data.all_methods.length === 0) return;
+
+            if (allChartInstance) allChartInstance.destroy();
+
+            const methods = data.all_methods.filter(r => !r.error);
+            const labels = methods.map(r => methodLabels[r.method] || r.method);
+
+            const precData = methods.map(r => r['Precision@5'] || 0);
+            const recData = methods.map(r => r['Recall@5'] || 0);
+            const covData = methods.map(r => r.Coverage || 0);
+
+            const colors = methods.map(r =>
+                r.approach === 'cf' ? 'rgba(108,99,255,0.6)' :
+                r.approach === 'content' ? 'rgba(34,197,94,0.6)' : 'rgba(245,158,11,0.6)'
+            );
+            const borderColors = methods.map(r =>
+                r.approach === 'cf' ? '#6C63FF' :
+                r.approach === 'content' ? '#22c55e' : '#f59e0b'
+            );
+
+            const ctx = document.getElementById('allChart').getContext('2d');
+            allChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Precision@5',
+                            data: precData,
+                            backgroundColor: 'rgba(108, 99, 255, 0.6)',
+                            borderColor: '#6C63FF',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Recall@5',
+                            data: recData,
+                            backgroundColor: 'rgba(255, 101, 132, 0.6)',
+                            borderColor: '#FF6584',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Coverage',
+                            data: covData,
+                            backgroundColor: 'rgba(0, 200, 117, 0.6)',
+                            borderColor: '#00C875',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'rgba(255,255,255,0.7)' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'rgba(255,255,255,0.5)' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    }
+                }
             });
         }
 
@@ -151,17 +337,7 @@
                 return;
             }
 
-            const methodLabels = {
-                user_based: 'User-Based',
-                item_based: 'Item-Based',
-                svd: 'SVD',
-                knn: 'KNN',
-                slope_one: 'Slope One'
-            };
-
-            let bestMethod = null;
             let bestRmse = Infinity;
-
             data.cf_methods.forEach(row => {
                 if (row.error) {
                     const tr = document.createElement('tr');
@@ -169,11 +345,7 @@
                     tbody.appendChild(tr);
                     return;
                 }
-
-                if (row.RMSE < bestRmse) {
-                    bestRmse = row.RMSE;
-                    bestMethod = row.method;
-                }
+                if (row.RMSE < bestRmse) bestRmse = row.RMSE;
 
                 const isBest = row.method === data.best_cf_method;
                 const tr = document.createElement('tr');
@@ -202,8 +374,6 @@
             if (!data.cf_methods || data.cf_methods.length === 0) return;
 
             const methods = data.cf_methods.filter(r => !r.error);
-            const methodLabels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
-
             const labels = methods.map(r => methodLabels[r.method] || r.method);
             const rmseData = methods.map(r => r.RMSE);
             const maeData = methods.map(r => r.MAE);
@@ -289,9 +459,8 @@
             if (data.analysis && data.analysis.method) {
                 document.getElementById('analysisBestMethod').innerHTML = data.analysis.method;
             } else if (data.best_cf_method) {
-                const labels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
                 document.getElementById('analysisBestMethod').innerHTML =
-                    `<strong>${labels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE among CF methods.`;
+                    `<strong>${methodLabels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE among CF methods.`;
             }
 
             if (data.analysis && data.analysis.approach) {

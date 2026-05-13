@@ -329,13 +329,19 @@ def _generate_analysis(cf_results, approach_results, best_cf, best_approach):
     return analysis
 
 
+CB_METHOD_NAMES = ["tfidf", "feature_match"]
+CB_METHOD_LABELS = {"tfidf": "TF-IDF Similarity", "feature_match": "Feature Matching"}
+KB_METHOD_NAMES = ["constraint", "rule", "utility"]
+KB_METHOD_LABELS = {"constraint": "Constraint-Based", "rule": "Rule-Based", "utility": "Utility-Based"}
+
+
 @app.route("/api/evaluate")
 def api_evaluate():
     """Full evaluation endpoint.
     
-    Runs all 5 CF methods + all 3 approaches across test users.
-    Returns: cf_methods (6 metrics each), best_cf_method, approaches
-    (3 approaches compared), best_approach, and analysis (data-driven text).
+    Runs all 5 CF methods + 2 CB methods + 3 KB methods across test users.
+    Returns: cf_methods, approaches, all_methods (unified list with all 10
+    individual methods), best_cf_method, best_approach, and analysis.
     """
     try:
         cf_results = evaluator.compare_cf_methods(cf_train, TEST, k=5)
@@ -348,6 +354,7 @@ def api_evaluate():
 
         evaluator.set_test_ratings(TEST)
         test_users = TEST["user_id"].unique()[:20]
+        train_ratings = ratings[~ratings.index.isin(TEST.index)]
 
         def _ap_r(recommender_fn):
             precisions, recalls = [], []
@@ -366,15 +373,17 @@ def api_evaluate():
         def _cf_r(uid):
             return cf_train.recommend("item_based", uid, n_recommendations=10)
 
-        train_ratings = ratings[~ratings.index.isin(TEST.index)]
-
-        def _cb_r(uid):
+        def _cb_tfidf_r(uid):
             profile = train_ratings[
                 (train_ratings["user_id"] == uid) & (train_ratings["rating"] >= 3.5)
             ]["product_id"].tolist()
             return cb.recommend("tfidf", user_profile_items=profile, n_recommendations=10)
 
-        def _kb_r(uid):
+        def _cb_fm_r(uid):
+            prefs = get_user_preferences(users, uid)
+            return cb.recommend("feature_match", preferences=prefs, n_recommendations=10)
+
+        def _kb_constraint_r(uid):
             prefs = get_user_preferences(users, uid)
             constraints = {
                 "budget_min": prefs.get("budget_min", 0),
@@ -384,8 +393,24 @@ def api_evaluate():
             }
             return kb.recommend("constraint", constraints=constraints, n_recommendations=10)
 
+        def _kb_rule_r(uid):
+            prefs = get_user_preferences(users, uid)
+            cats = list(prefs.get("preferred_categories", set()))
+            context = {
+                "interacted_category": cats[0] if cats else "Electronics",
+                "preferred_categories": prefs.get("preferred_categories", set()),
+                "favorite_brands": prefs.get("favorite_brands", set()),
+                "budget_min": prefs.get("budget_min", 0),
+                "budget_max": prefs.get("budget_max", 999999),
+            }
+            return kb.recommend("rule", context=context, n_recommendations=10)
+
+        def _kb_utility_r(uid):
+            prefs = get_user_preferences(users, uid)
+            return kb.recommend("utility", preferences=prefs, n_recommendations=10)
+
         approach_results = []
-        for name, fn in [("Collaborative Filtering", _cf_r), ("Content-Based", _cb_r), ("Knowledge-Based", _kb_r)]:
+        for name, fn in [("Collaborative Filtering", _cf_r), ("Content-Based", _cb_tfidf_r), ("Knowledge-Based", _kb_constraint_r)]:
             p, r = _ap_r(fn)
             if p:
                 approach_results.append({
@@ -395,6 +420,42 @@ def api_evaluate():
                 })
 
         best_approach = max(approach_results, key=lambda a: a.get("Precision@5", 0))["approach"] if approach_results else None
+
+        all_methods = []
+        for r in cf_results:
+            entry = dict(r)
+            entry["approach"] = "cf"
+            all_methods.append(entry)
+
+        cb_method_fns = [
+            ("tfidf", "content", _cb_tfidf_r),
+            ("feature_match", "content", _cb_fm_r),
+        ]
+        for method_id, approach, fn in cb_method_fns:
+            try:
+                result = evaluator.evaluate_any_method(method_id, approach, fn, TEST, k=5)
+                all_methods.append(result)
+            except Exception as e:
+                all_methods.append({"method": method_id, "approach": approach, "error": str(e)})
+
+        kb_method_fns = [
+            ("constraint", "knowledge", _kb_constraint_r),
+            ("rule", "knowledge", _kb_rule_r),
+            ("utility", "knowledge", _kb_utility_r),
+        ]
+        for method_id, approach, fn in kb_method_fns:
+            try:
+                result = evaluator.evaluate_any_method(method_id, approach, fn, TEST, k=5)
+                all_methods.append(result)
+            except Exception as e:
+                all_methods.append({"method": method_id, "approach": approach, "error": str(e)})
+
+        best_all = max(
+            [m for m in all_methods if "error" not in m and m.get("Precision@5", 0) > 0],
+            key=lambda m: m.get("Precision@5", 0),
+            default=None,
+        )
+
         analysis = _generate_analysis(cf_results, approach_results, best_cf, best_approach)
 
         return jsonify({
@@ -402,6 +463,8 @@ def api_evaluate():
             "best_cf_method": best_cf,
             "approaches": approach_results,
             "best_approach": best_approach,
+            "all_methods": all_methods,
+            "best_all_method": best_all["method"] if best_all else None,
             "analysis": analysis,
         })
     except Exception as e:
@@ -416,6 +479,11 @@ CF_METHOD_LABELS = {
     "knn": "KNN",
     "slope_one": "Slope One",
 }
+
+ALL_METHOD_LABELS = {}
+ALL_METHOD_LABELS.update(CF_METHOD_LABELS)
+ALL_METHOD_LABELS.update(CB_METHOD_LABELS)
+ALL_METHOD_LABELS.update(KB_METHOD_LABELS)
 
 @app.route("/api/evaluate/cf/<method>")
 def api_evaluate_cf(method):
