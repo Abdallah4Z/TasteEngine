@@ -286,43 +286,30 @@
         function renderAnalysis(data) {
             document.getElementById('analysisSection').classList.remove('hidden');
 
-            const methodLabels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
-
-            if (data.best_cf_method) {
-                const best = data.cf_methods.find(r => r.method === data.best_cf_method);
-                const rmseVal = best ? best.RMSE.toFixed(4) : '—';
+            if (data.analysis && data.analysis.method) {
+                document.getElementById('analysisBestMethod').innerHTML = data.analysis.method;
+            } else if (data.best_cf_method) {
+                const labels = { user_based: 'User-Based', item_based: 'Item-Based', svd: 'SVD', knn: 'KNN', slope_one: 'Slope One' };
                 document.getElementById('analysisBestMethod').innerHTML =
-                    `<strong>${methodLabels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE (${rmseVal}) among all CF methods. ` +
-                    `SVD (Matrix Factorization) typically performs best because it captures latent factors in the user-item interaction matrix, ` +
-                    `handling sparsity better than memory-based methods like User-Based or Item-Based CF.`;
+                    `<strong>${labels[data.best_cf_method] || data.best_cf_method}</strong> achieves the lowest RMSE among CF methods.`;
             }
 
-            if (data.best_approach && data.approaches && data.approaches.length > 0) {
-                const best = data.approaches.find(a => a.approach === data.best_approach);
-                const precVal = best ? best['Precision@5'].toFixed(4) : '—';
+            if (data.analysis && data.analysis.approach) {
+                document.getElementById('analysisBestApproach').innerHTML = data.analysis.approach;
+            } else if (data.best_approach) {
                 document.getElementById('analysisBestApproach').innerHTML =
-                    `<strong>${data.best_approach}</strong> achieves the highest Precision@5 (${precVal}) on this dataset. ` +
-                    `Collaborative Filtering generally performs best when sufficient rating data exists. ` +
-                    `Content-Based works well for new items but suffers from overspecialization. ` +
-                    `Knowledge-Based excels in cold-start scenarios and when users have explicit constraints.`;
+                    `<strong>${data.best_approach}</strong> performs best on this dataset.`;
             } else {
                 document.getElementById('analysisBestApproach').textContent = 'Run evaluation to compare approaches.';
             }
 
-            document.getElementById('analysisConditions').innerHTML = `
-                <b>• Dense user data:</b> Collaborative Filtering (leverages peer patterns)<br>
-                <b>• Cold-start user:</b> Knowledge-Based (no history needed)<br>
-                <b>• Cold-start item:</b> Content-Based (matches item features)<br>
-                <b>• Explicit constraints:</b> Knowledge-Based (precise filtering)<br>
-                <b>• Niche categories:</b> Content-Based (item features override sparsity)
-            `;
+            document.getElementById('analysisConditions').innerHTML =
+                (data.analysis && data.analysis.conditions) ||
+                'Run evaluation to see condition analysis.';
 
             document.getElementById('analysisWhy').innerHTML =
-                `Differences arise from algorithmic biases: CF relies on the collective behavior of users, ` +
-                `making it powerful for popular items but weak for new users/items. Content-Based depends on ` +
-                `feature representation quality and tends to overspecialize. Knowledge-Based is deterministic ` +
-                `and transparent but requires explicit user input and domain rules. The choice depends on data ` +
-                `availability, user context, and the specific recommendation goal.`;
+                (data.analysis && data.analysis.why) ||
+                'Run evaluation to see analysis.';
         }
 
         if (localStorage.getItem('autoEval') === 'true') {

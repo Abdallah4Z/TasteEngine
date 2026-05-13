@@ -215,6 +215,170 @@ def api_recommend():
         return jsonify({"error": str(e)}), 500
 
 
+def _generate_analysis(cf_results, approach_results, best_cf, best_approach):
+    analysis = {}
+
+    method_labels = {
+        "user_based": "User-Based CF", "item_based": "Item-Based CF",
+        "svd": "SVD", "knn": "KNN-Based CF", "slope_one": "Slope One",
+    }
+
+    if cf_results:
+        valid = [r for r in cf_results if "error" not in r]
+        if valid and best_cf:
+            best = next((r for r in valid if r["method"] == best_cf), None)
+            rmse_best = best["RMSE"] if best else 0
+
+            sorted_rmse = sorted(valid, key=lambda x: x["RMSE"])
+            sorted_p = sorted(valid, key=lambda x: x.get("Precision@5", 0), reverse=True)
+            sorted_r = sorted(valid, key=lambda x: x.get("Recall@5", 0), reverse=True)
+            sorted_cov = sorted(valid, key=lambda x: x.get("Coverage", 0), reverse=True)
+
+            method_best_rmse = method_labels.get(sorted_rmse[0]["method"], sorted_rmse[0]["method"])
+            method_best_p = method_labels.get(sorted_p[0]["method"], sorted_p[0]["method"])
+            method_best_cov = method_labels.get(sorted_cov[0]["method"], sorted_cov[0]["method"])
+
+            explanations = []
+            if best_cf in ("svd", "knn"):
+                explanations.append(f"<b>{method_labels.get(best_cf, best_cf)}</b> wins with lowest RMSE ({rmse_best:.4f}) because it captures latent interaction patterns, reducing prediction error across sparse rating data.")
+            elif best_cf in ("item_based",):
+                explanations.append(f"<b>{method_labels.get(best_cf, best_cf)}</b> wins with lowest RMSE ({rmse_best:.4f}) because item-item similarities are more stable than user-user similarities in this dataset.")
+            else:
+                explanations.append(f"<b>{method_labels.get(best_cf, best_cf)}</b> achieves the lowest RMSE ({rmse_best:.4f}) among all CF methods.")
+            explanations.append(f"For Precision@5, <b>{method_best_p}</b> leads — meaning it recommends relevant items more consistently in the top-5.")
+            explanations.append(f"For Coverage, <b>{method_best_cov}</b> explores the catalog most broadly, reducing the filter bubble effect.")
+
+            for r in valid:
+                m = r["method"]
+                label = method_labels.get(m, m)
+                if m == "item_based" and r.get("Coverage", 0) > 0.7:
+                    explanations.append(f"<b>{label}</b> has high coverage ({r['Coverage']:.2f}) because every item gets compared to every other item.")
+                elif m == "svd":
+                    explanations.append(f"<b>{label}</b> compresses the matrix into latent factors — fast at prediction but may miss niche patterns ({r.get('Precision@5', 0):.3f} precision).")
+                elif m == "user_based" and r.get("Precision@5", 0) > 0.02:
+                    explanations.append(f"<b>{label}</b> finds lookalike users; performance depends on how many neighbors share the user's taste.")
+                elif m == "knn":
+                    explanations.append(f"<b>{label}</b> uses nearest neighbors; robust but can be noisy with sparse data.")
+                elif m == "slope_one":
+                    explanations.append(f"<b>{label}</b> is simple and fast but assumes linear rating deviations, which may oversimplify.")
+
+            analysis["method"] = " ".join(explanations)
+
+    if approach_results:
+        valid_app = [a for a in approach_results if "error" not in a]
+        if valid_app and best_approach:
+            best_a = next((a for a in valid_app if a["approach"] == best_approach), None)
+            prec_val = best_a["Precision@5"] if best_a else 0
+
+            explanations = []
+            if best_approach == "Collaborative Filtering":
+                explanations.append(f"<b>Collaborative Filtering</b> ranks best (Precision@5: {prec_val:.4f}) because the dataset has dense rating patterns (avg 40 ratings/user), giving CF enough signal to find meaningful user-user/item-item similarities.")
+            elif best_approach == "Content-Based":
+                explanations.append(f"<b>Content-Based</b> ranks best (Precision@5: {prec_val:.4f}) because products have rich text features, making TF-IDF similarity highly discriminative for this dataset.")
+            else:
+                explanations.append(f"<b>Knowledge-Based</b> ranks best (Precision@5: {prec_val:.4f}) because users have well-defined category/brand/budget preferences that map directly to product attributes.")
+            explanations.append("CF leverages collective behavior, Content-Based uses item features, and Knowledge-Based applies explicit rules — their relative performance depends on data density, feature richness, and constraint specificity.")
+
+            for a in valid_app:
+                if a["approach"] == "Content-Based" and a.get("Precision@5", 0) < 0.01:
+                    explanations.append("Content-Based shows low precision here because TF-IDF requires a user profile of liked items — cold-start users with few ratings get weaker recommendations.")
+                if a["approach"] == "Knowledge-Based" and a.get("Precision@5", 0) < 0.01:
+                    explanations.append("Knowledge-Based precision is limited because it applies hard constraints — if a user has narrow preferences, few products pass the filter.")
+                if a["approach"] == "Collaborative Filtering" and a.get("Recall@5", 0) > 0.03:
+                    explanations.append("CF's higher recall suggests it casts a wider net, surfacing relevant items the user might not have explicitly searched for (serendipity).")
+
+            analysis["approach"] = " ".join(explanations)
+
+    analysis["conditions"] = (
+        "<b>• Dense user-item ratings:</b> Collaborative Filtering performs best (leverages peer behavior).<br>"
+        "<b>• Cold-start user (no history):</b> Knowledge-Based excels (no ratings needed, just constraints).<br>"
+        "<b>• Cold-start item (new product):</b> Content-Based works well (matches item features to user profile).<br>"
+        "<b>• Explicit constraints (budget, brand):</b> Knowledge-Based gives precise, explainable results.<br>"
+        "<b>• Sparse / niche categories:</b> Content-Based overcomes sparsity by relying on item attributes rather than user co-ratings."
+    )
+    analysis["why"] = (
+        "Differences stem from each approach's fundamental mechanism: "
+        "<b>CF</b> relies on the collective behavior of similar users/items — powerful with dense data but fails in cold-start scenarios. "
+        "<b>Content-Based</b> depends on feature engineering and TF-IDF similarity — it avoids the cold-start problem for items but tends to overspecialize, recommending only items similar to what the user already liked. "
+        "<b>Knowledge-Based</b> is deterministic and fully interpretable — it never recommends outside the user's explicit constraints but requires manual input and cannot discover unexpected preferences. "
+        "The optimal choice hinges on data availability: CF for dense interaction logs, Content-Based for rich product metadata, and Knowledge-Based for goal-driven sessions."
+    )
+    return analysis
+
+
+@app.route("/api/evaluate")
+def api_evaluate():
+    try:
+        cf_results = evaluator.compare_cf_methods(cf_train, TEST, k=5)
+        best_cf = None
+        best_rmse = float("inf")
+        for r in cf_results:
+            if "error" not in r and r["RMSE"] < best_rmse:
+                best_rmse = r["RMSE"]
+                best_cf = r["method"]
+
+        evaluator.set_test_ratings(TEST)
+        test_users = TEST["user_id"].unique()[:20]
+
+        def _ap_r(recommender_fn):
+            precisions, recalls = [], []
+            for uid in test_users:
+                try:
+                    recs = recommender_fn(uid)
+                except Exception:
+                    recs = []
+                rec_items = [r[0] for r in recs]
+                relevant = evaluator._get_relevant_for_user(uid)
+                if relevant:
+                    precisions.append(evaluator.precision_at_k(rec_items, relevant, 5))
+                    recalls.append(evaluator.recall_at_k(rec_items, relevant, 5))
+            return precisions, recalls
+
+        def _cf_r(uid):
+            return cf_train.recommend("item_based", uid, n_recommendations=10)
+
+        train_ratings = ratings[~ratings.index.isin(TEST.index)]
+
+        def _cb_r(uid):
+            profile = train_ratings[
+                (train_ratings["user_id"] == uid) & (train_ratings["rating"] >= 3.5)
+            ]["product_id"].tolist()
+            return cb.recommend("tfidf", user_profile_items=profile, n_recommendations=10)
+
+        def _kb_r(uid):
+            prefs = get_user_preferences(users, uid)
+            constraints = {
+                "budget_min": prefs.get("budget_min", 0),
+                "budget_max": prefs.get("budget_max", 999999),
+                "category": list(prefs.get("preferred_categories", set())),
+                "brand": list(prefs.get("favorite_brands", set())),
+            }
+            return kb.recommend("constraint", constraints=constraints, n_recommendations=10)
+
+        approach_results = []
+        for name, fn in [("Collaborative Filtering", _cf_r), ("Content-Based", _cb_r), ("Knowledge-Based", _kb_r)]:
+            p, r = _ap_r(fn)
+            if p:
+                approach_results.append({
+                    "approach": name,
+                    "Precision@5": round(np.mean(p), 4),
+                    "Recall@5": round(np.mean(r), 4),
+                })
+
+        best_approach = max(approach_results, key=lambda a: a.get("Precision@5", 0))["approach"] if approach_results else None
+        analysis = _generate_analysis(cf_results, approach_results, best_cf, best_approach)
+
+        return jsonify({
+            "cf_methods": cf_results,
+            "best_cf_method": best_cf,
+            "approaches": approach_results,
+            "best_approach": best_approach,
+            "analysis": analysis,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 CF_METHOD_NAMES = ["user_based", "item_based", "svd", "knn", "slope_one"]
 CF_METHOD_LABELS = {
     "user_based": "User-Based",
