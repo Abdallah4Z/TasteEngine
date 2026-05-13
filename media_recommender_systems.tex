@@ -1,0 +1,1030 @@
+\documentclass[aspectratio=169, 11pt]{beamer}
+\usetheme{Madrid}
+\usecolortheme{beaver}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{tikz}
+\usepackage{hyperref}
+\usepackage{multirow}
+\usepackage[scale=0.9]{tgheros}
+
+\usetikzlibrary{positioning, arrows, shapes, calc}
+\tikzset{>=stealth}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{}
+
+\title[Media Recommender Systems]{Media Recommender Systems: \\ Spotify vs YouTube vs Netflix}
+\subtitle{A Technical Deep Dive into Production-Grade Content AI}
+\author{Intelligent Recommender Systems Course}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{Agenda}
+\tableofcontents
+\end{frame}
+
+%=================================================================
+\section{The Media Recommendation Problem}
+
+\begin{frame}{Why Media Recommendation Is Fundamentally Different}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\small
+\textbf{Job / E-commerce RS}
+\begin{itemize}
+    \item High-stakes: wrong job $\to$ years lost
+    \item Sparse interactions (few apps/user)
+    \item Non-stationary preferences (months)
+    \item Multi-stakeholder optimization
+    \item Long feedback cycles
+\end{itemize}
+
+\column{0.48\textwidth}
+\small
+\textbf{Media RS (Spotify, YouTube, Netflix)}
+\begin{itemize}
+    \item Low-stakes: wrong song $\to$ 30s skip
+    \item Abundant implicit feedback (skips, dwell)
+    \item Rapidly shifting tastes (minutes/hours)
+    \item Single-stakeholder: user satisfaction
+    \item Real-time feedback loops
+\end{itemize}
+\end{columns}
+
+\vfill
+\centering
+\small
+\textbf{Key insight}: Media RS must optimize for \textbf{engagement and session depth}, with instant feedback on every recommendation.
+\end{frame}
+
+%=================================================================
+\begin{frame}{The Two-Stage Pipeline}
+\vspace{-0.2cm}
+\begin{minipage}[t]{0.48\textwidth}
+\vspace{0pt}\centering
+\begin{tikzpicture}[node distance=0.9cm, auto, every node/.style={font=\tiny}, scale=0.5, transform shape]
+\node[draw, fill=blue!20, rectangle, rounded corners, minimum width=2.2cm, minimum height=0.7cm] (data) {All Items $\mathcal{O}(10^7)$};
+\node[draw, fill=orange!20, rectangle, rounded corners, minimum width=2.6cm, minimum height=0.8cm, right=1cm of data] (retrieval) {\textbf{Retrieval} EBR / LSH $\to \mathcal{O}(10^2)$};
+\node[draw, fill=green!20, rectangle, rounded corners, minimum width=2.6cm, minimum height=0.8cm, right=1cm of retrieval] (ranking) {\textbf{Ranking} DNN /wide\&deep $\to \mathcal{O}(10^1)$};
+\node[draw, fill=red!20, rectangle, rounded corners, minimum width=1.5cm, minimum height=0.7cm, right=1cm of ranking] (final) {Top-N};
+\draw[->, thick] (data)--(retrieval);
+\draw[->, thick] (retrieval)--node[above, font=\tiny] {Candidates} (ranking);
+\draw[->, thick] (ranking)--(final);
+\end{tikzpicture}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\vspace{0pt}
+\small
+\textbf{Why two stages?}
+\begin{itemize}
+    \item Full DNN on $10^7$ items exceeds latency SLA (under 200ms)
+    \item Retrieval: cheap approximate nearest neighbor (ANN) search
+    \item Ranking: expensive precision model on $O(100)$ candidates
+    \item All three platforms follow this pattern
+\end{itemize}
+\end{minipage}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Three Pillars of Data}
+\small
+\begin{columns}[T]
+\column{0.32\textwidth}
+\centering
+\setlength{\fboxsep}{4pt}
+\colorbox{blue!10}{\parbox{0.35\textwidth}{\centering\textbf{User Profile}\\[2mm]Demographics, listening\\history, liked items,\\followed artists, skips,\\session context\\[2mm]\# features: 100--1000}}
+
+\column{0.32\textwidth}
+\centering
+\colorbox{orange!10}{\parbox{0.35\textwidth}{\centering\textbf{Item Features}\\[2mm]Audio features, genre,\\artist/director, tags,\\duration, popularity,\\release date\\[2mm]\# features: 50--500}}
+
+\column{0.32\textwidth}
+\centering
+\colorbox{green!10}{\parbox{0.35\textwidth}{\centering\textbf{Interaction Signals}\\[2mm]Plays, skips, likes,\\dwell time, repeat rate,\\session depth, time\\of day, device\\[2mm]\# features: 20--100}}
+\end{columns}
+
+\vspace{0.3cm}
+\begin{equation*}
+\text{FeatureVec} = \phi_{\text{user}}(u) \oplus \phi_{\text{item}}(i) \oplus \phi_{\text{ctx}}(t) \oplus \phi_{\text{seq}}(u)
+\end{equation*}
+\small\hfill(Total: $10^4$--$10^5$ after embedding)
+\end{frame}
+
+%=================================================================
+\section{The Cold Start \& Content Understanding}
+
+\begin{frame}{The Cold Start Challenge in Media}
+\small
+\begin{columns}[T]
+\column{0.48\textwidth}
+\textbf{New User (no history)}
+\begin{itemize}
+    \item No listening/watching history
+    \item No likes or follows
+    \item No session context
+\end{itemize}
+\textbf{Solutions}:
+\begin{itemize}
+    \item Onboarding: pick genres/artists
+    \item Device/region $\to$ popular items
+    \item Demographic collaborative filtering
+\end{itemize}
+
+\column{0.48\textwidth}
+\textbf{New Item (cold item)}
+\begin{itemize}
+    \item No user interactions yet
+    \item Cannot be CF-recommended
+\end{itemize}
+\textbf{Solutions}:
+\begin{itemize}
+    \item Content-based: audio/video features
+    \item Metadata matching (genre, tags)
+    \item Explore-exploit (Thompson sampling)
+\end{itemize}
+\end{columns}
+
+\vspace{0.2cm}
+\textbf{Content Understanding Pipeline}:
+\begin{equation*}
+\mathbf{v}_i = \text{Encode}(\text{audio\_signal} \oplus \text{tags} \oplus \text{metadata}) \in \mathbb{R}^d
+\end{equation*}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Audio \& Video Feature Extraction}
+\small
+\begin{columns}[T]
+\column{0.48\textwidth}
+\textbf{Spotify Audio Features}
+\begin{itemize}
+    \item \textbf{Danceability}: 0.0--1.0 (rhythm stability)
+    \item \textbf{Energy}: 0.0--1.0 (intensity)
+    \item \textbf{Valence}: 0.0--1.0 (positivity)
+    \item \textbf{Tempo}: BPM (beats per minute)
+    \item \textbf{Acousticness}: 0.0--1.0 (acoustic vs electronic)
+    \item \textbf{Speechiness}: 0.0--1.0 (spoken word)
+\end{itemize}
+
+\column{0.48\textwidth}
+\textbf{YouTube/Netflix Video Features}
+\begin{itemize}
+    \item Visual embeddings (CNN/ResNet frames)
+    \item Audio embeddings (speech/music/effects)
+    \item Text embeddings (title, description)
+    \item Face detection and recognition
+    \item Scene classification
+    \item Content moderation tags
+\end{itemize}
+\end{columns}
+
+\vspace{0.15cm}
+\textbf{Feature Fusion}:
+\begin{equation*}
+\mathbf{v}_{\text{item}} = \mathbf{W}_a \cdot \mathbf{v}_{\text{audio}} + \mathbf{W}_v \cdot \mathbf{v}_{\text{visual}} + \mathbf{W}_t \cdot \mathbf{v}_{\text{text}}
+\end{equation*}
+\end{frame}
+
+%=================================================================
+\section{Spotify's Architecture}
+
+\begin{frame}{Spotify: Music Recommendation Ecosystem}
+\small
+\textbf{Core Paradigm}: Three complementary approaches working together:
+
+\begin{center}
+\begin{tikzpicture}[node distance=1cm, auto, every node/.style={font=\small}, scale=0.65, transform shape]
+\node[draw, fill=blue!20, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.7cm] (cf) {Collaborative};
+\node[draw, fill=green!20, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.7cm, right=1.5cm of cf] (nlp) {Content (NLP)};
+\node[draw, fill=orange!20, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.7cm, right=1.5cm of nlp] (audio) {Raw Audio};
+\node[draw, fill=red!20, rectangle, rounded corners, minimum width=3cm, minimum height=0.8cm, below=0.7cm of $(cf)!0.5!(audio)$] (ensemble) {Ensemble / Blending};
+\node[draw, fill=purple!20, rectangle, rounded corners, minimum width=2cm, minimum height=0.6cm, below=0.5cm of ensemble] (final) {Recommendations};
+\draw[->, thick] (cf)--(ensemble); \draw[->, thick] (nlp)--(ensemble);
+\draw[->, thick] (audio)--(ensemble); \draw[->, thick] (ensemble)--(final);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.15cm}
+\textbf{Three Pillars}:
+\begin{description}
+    \item[Collaborative:] Co-occurrence and user behavior patterns
+    \item[NLP:] Blog posts, lyrics, news articles about artists
+    \item[Raw Audio:] Convolutional neural nets on audio waveforms
+\end{description}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Spotify: Collaborative Filtering at Scale}
+\small
+\textbf{Matrix Factorization} for implicit feedback:
+\begin{equation*}
+\hat{r}_{u,i} = \mu + b_u + b_i + \mathbf{p}_u \cdot \mathbf{q}_i^T
+\end{equation*}
+
+\textbf{Weighted ALS} (implicit feedback):
+\begin{equation*}
+\min_{\mathbf{P},\mathbf{Q}} \sum_{u,i} c_{ui}(p_{ui} - \mathbf{p}_u\mathbf{q}_i^T)^2 + \lambda(\|\mathbf{P}\|^2 + \|\mathbf{Q}\|^2)
+\end{equation*}
+where $c_{ui} = 1 + \alpha \cdot \text{play\_count}_{ui}$ and $p_{ui} = \mathbb{I}[\text{played}_{ui} > 0]$.
+
+\vspace{0.15cm}
+\textbf{Session-based CF} (next-track prediction):
+\begin{equation*}
+P(\text{track}_{t+1} \mid \text{track}_t) \propto \frac{\text{count}(\text{track}_t \to \text{track}_{t+1})}{\text{count}(\text{track}_t \to \cdot)}
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Discover Weekly} combines:
+\begin{itemize}
+    \item \textbf{CF}: Similar users' playlists
+    \item \textbf{Content}: Audio feature similarity
+    \item \textbf{NLP}: Artist/blog text embeddings
+\end{itemize}
+Each user receives a unique 30-track playlist refreshed weekly.
+\end{frame}
+
+%=================================================================
+\begin{frame}{Spotify: Raw Audio Modeling with CNN}
+\small
+\textbf{Goal}: Extract meaningful features directly from audio waveforms, not just metadata.
+
+\begin{center}
+\begin{tikzpicture}[node distance=0.5cm, auto, every node/.style={font=\tiny}, scale=0.55, transform shape]
+\node[draw, fill=gray!20, rectangle, minimum width=1.5cm, minimum height=0.5cm] (audio) {Audio Frame};
+\node[draw, fill=blue!20, rectangle, minimum width=1.5cm, minimum height=0.5cm, right=0.6cm of audio] (stft) {STFT};
+\node[draw, fill=blue!30, rectangle, minimum width=1.5cm, minimum height=0.5cm, right=0.6cm of stft] (conv1) {Conv1};
+\node[draw, fill=blue!40, rectangle, minimum width=1.5cm, minimum height=0.5cm, right=0.6cm of conv1] (conv2) {Conv2};
+\node[draw, fill=blue!50, rectangle, minimum width=1.5cm, minimum height=0.5cm, right=0.6cm of conv2] (conv3) {Conv3};
+\node[draw, fill=green!20, rectangle, minimum width=1.5cm, minimum height=0.5cm, right=0.6cm of conv3] (fc) {FC};
+\node[draw, fill=red!20, rectangle, minimum width=1.5cm, minimum height=0.5cm, right=0.6cm of fc] (emb) {$\mathbf{v}_{\text{audio}}$};
+\draw[->, thick] (audio)--(stft)--(conv1)--(conv2)--(conv3)--(fc)--(emb);
+\draw[->, thick] (fc) .. controls +(0,-1.2) and +(0,-1.2) .. node[below, font=\tiny] {Skip connection} (conv1);
+\end{tikzpicture}
+\end{center}
+
+\textbf{Architecture details}:
+\begin{itemize}
+    \item Input: Short-Time Fourier Transform (STFT) spectrogram
+    \item 3 convolutional layers with max-pooling
+    \item Skip connections (ResNet-style)
+    \item Output: 128-dim embedding vector
+    \item Trained on 50M tracks across all genres
+\end{itemize}
+
+\textbf{Uses}: Genre classification, mood detection, similar-song search, Discover Weekly candidate generation.
+\end{frame}
+
+%=================================================================
+\begin{frame}{Spotify: NLP from the Internet}
+\small
+\textbf{Source}: Blogs, forums, news articles, reviews mentioning artists.
+
+\textbf{Method}: Train Word2Vec / Doc2Vec on a corpus of music-related text.
+
+\begin{equation*}
+\mathbf{v}_{\text{artist}} = \frac{1}{|D_a|}\sum_{d\in D_a} \text{Doc2Vec}(d)
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Euclidean embedding space}:
+\begin{align*}
+\text{similar artists} &\Rightarrow \text{nearby in embedding space} \\
+\text{different genres} &\Rightarrow \text{far apart}
+\end{align*}
+
+\vspace{0.15cm}
+\textbf{Example nearest neighbors} (NLP space):
+\begin{table}
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Artist} & \textbf{Nearest NLP Neighbors} \\
+\midrule
+The Beatles & Rolling Stones, Led Zeppelin, Queen \\
+Kendrick Lamar & J. Cole, Drake, Childish Gambino \\
+Daft Punk & Justice, LCD Soundsystem, Air \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key advantage}: Captures cultural context and genre relationships that pure audio or co-occurrence cannot.
+\end{frame}
+
+%=================================================================
+\section{YouTube's Architecture}
+
+\begin{frame}{YouTube: Deep Neural Network for Video Recommendation}
+\small
+\textbf{Two-stage paradigm} with deep neural networks:
+
+\begin{center}
+\begin{tikzpicture}[node distance=1.2cm, auto, every node/.style={font=\small}, scale=0.7, transform shape]
+\node[draw, fill=blue!20, rectangle, rounded corners, minimum width=3cm, minimum height=0.8cm] (cand) {Candidate Generation};
+\node[draw, fill=green!20, rectangle, rounded corners, minimum width=3cm, minimum height=0.8cm, right=1.5cm of cand] (rank) {Ranking};
+\node[draw, fill=red!20, rectangle, rounded corners, minimum width=2cm, minimum height=0.8cm, right=1.5cm of rank] (final) {Top-N};
+
+\node[draw, fill=blue!5, rectangle, minimum width=2.5cm, minimum height=0.5cm, below=0.4cm of cand] (cand_detail) {Hundreds of candidates};
+\node[draw, fill=green!5, rectangle, minimum width=2.5cm, minimum height=0.5cm, below=0.4cm of rank] (rank_detail) {Deep ranking $\to$ dozen};
+\node[draw, fill=red!5, rectangle, minimum width=2.5cm, minimum height=0.5cm, below=0.4cm of final] (final_detail) {Diversity re-rank};
+
+\draw[->, thick] (cand)--(rank)--(final);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.15cm}
+\textbf{Scale}:
+\begin{itemize}
+    \item 500+ hours of video uploaded every minute
+    \item Billions of users, millions of daily active
+    \item Sub-200ms response time for recommendations
+    \item Multiple candidate generation channels (explored next)
+\end{itemize}
+\end{frame}
+
+%=================================================================
+\begin{frame}{YouTube: Candidate Generation with Deep Neural Networks}
+\small
+\textbf{Architecture}: Two-tower neural network (query tower + video tower).
+
+\begin{equation*}
+\mathbf{e}_u = f_\theta(\text{watch\_history}, \text{search\_history}, \text{demographics}) \in \mathbb{R}^d
+\end{equation*}
+\begin{equation*}
+\mathbf{e}_v = g_\phi(\text{video\_features}, \text{channel}, \text{tags}) \in \mathbb{R}^d
+\end{equation*}
+
+\textbf{Score}: $\displaystyle \text{score}(u,v) = \frac{\mathbf{e}_u \cdot \mathbf{e}_v}{\|\mathbf{e}_u\|\|\mathbf{e}_v\|}$
+
+\vspace{0.15cm}
+\textbf{Training}: Sampled softmax with millions of negative samples:
+\begin{equation*}
+\mathcal{L} = -\sum_{(u,v^+)} \log \frac{e^{\text{score}(u,v^+)}}{\sum_{v \in \mathcal{N}(u)} e^{\text{score}(u,v)}}
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Key design choices}:
+\begin{itemize}
+    \item Watch history: average of video embeddings (fixed window)
+    \item Demographics: age, gender, locale embedded separately
+    \item Example age: features decay with time (freshness bias)
+    \item Hashing trick for sparse IDs (compressed feature space)
+\end{itemize}
+\end{frame}
+
+%=================================================================
+\begin{frame}{YouTube: Ranking with Wide \& Deep}
+\small
+\textbf{Wide \& Deep architecture} (Google, 2016):
+\begin{equation*}
+\hat{y} = \sigma(\underbrace{\mathbf{w}_{\text{wide}}^T \mathbf{x}_{\text{wide}}}_{\text{memorization}} \;+\; \underbrace{\mathbf{W}_L\,\text{ReLU}(\cdots\,\text{ReLU}(\mathbf{W}_1\mathbf{x}_{\text{deep}} + \mathbf{b}_1)\cdots) + b_L}_{\text{generalization}})
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Wide side} (linear): Cross-product feature transformations
+\begin{equation*}
+\phi_k(\mathbf{x}) = \prod_{i=1}^d x_i^{c_{ki}}, \quad c_{ki} \in \{0,1\}
+\end{equation*}
+Captures explicit co-occurrence patterns (e.g., user watched X AND video is from channel Y).
+
+\vspace{0.15cm}
+\textbf{Deep side} (DNN): 3 hidden layers (1024 $\to$ 512 $\to$ 256) with ReLU.
+
+\vspace{0.15cm}
+\textbf{Loss}: Weighted logistic regression with watch-time weighting:
+\begin{equation*}
+\mathcal{L} = -\sum_i w_i\bigl[y_i\log\hat{y}_i + (1-y_i)\log(1-\hat{y}_i)\bigr]
+\end{equation*}
+$w_i$ = observed watch time of the video. Optimizes for expected watch time, not just click.
+\end{frame}
+
+%=================================================================
+\begin{frame}{YouTube: Expected Watch Time Optimization}
+\small
+\textbf{Key insight}: YouTube optimizes for \textbf{watch time}, not clicks. A clickbait video with 5s watch is worse than a relevant video with 10min watch.
+
+\textbf{Training label}: $\displaystyle \text{label} = \frac{\text{watch\_time}}{\text{video\_duration}}$
+
+\vspace{0.15cm}
+\textbf{Weighted logistic regression}:
+\begin{equation*}
+\text{odds}(y=1 \mid \mathbf{x}) \approx \mathbb{E}[T] \quad\text{(expected watch time)}
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Feature engineering for watch time}:
+\begin{table}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Feature} & \textbf{Description} \\
+\midrule
+Watch history & Last 50 videos watched (embedding avg) \\
+Language affinity & User's preferred languages \\
+Freshness & How recent the video is \\
+Previous impressions & How often user saw \& ignored this \\
+Time since last watch & Session stickiness signal \\
+Device \& time & Mobile vs desktop, hour of day \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.1cm}
+\textbf{Result}: 3x improvement in watch time over previous system.
+\end{frame}
+
+%=================================================================
+\section{Netflix's Architecture}
+
+\begin{frame}{Netflix: Personalized Ranking with Context}
+\small
+\textbf{Netflix's challenge}: One account, multiple users, multiple devices, global catalog.
+
+\textbf{Three-tier personalization}:
+\begin{enumerate}
+    \item \textbf{Which titles to show}: Two-tower retrieval (user $\times$ context)
+    \item \textbf{How to show them}: Artwork personalization (different posters per user)
+    \item \textbf{Row selection}: Which genre rows appear and in what order
+\end{enumerate}
+
+\vspace{0.15cm}
+\textbf{Ranking architecture}:
+\begin{equation*}
+P(\text{play} \mid u, i, \text{context}) = \sigma(\mathbf{w}^T \cdot [\phi_{\text{personal}}(u,i) \; \oplus \; \phi_{\text{context}}(t) \; \oplus \; \phi_{\text{popular}}(i)])
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Context signals}:
+\begin{itemize}
+    \item Time of day (morning: shorter content, evening: movies)
+    \item Day of week (weekend: series bingeing)
+    \item Device (mobile: shorter, TV: longer)
+    \item Number of people watching (single vs group viewing)
+\end{itemize}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Netflix: Artwork Personalization}
+\small
+\textbf{Unique approach}: Different users see different poster art for the same title.
+
+\begin{center}
+\begin{tikzpicture}[node distance=1cm, auto, scale=0.65, transform shape]
+\node[draw, fill=blue!10, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.6cm] (title) {Movie Title};
+\node[draw, fill=orange!10, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.6cm, right=1.2cm of title] (features) {Scene Features};
+\node[draw, fill=green!10, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.6cm, right=1.2cm of features] (user) {User Preferences};
+\node[draw, fill=red!10, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.6cm, below=0.6cm of features] (classifier) {Artwork Classifier};
+\node[draw, fill=purple!10, rectangle, rounded corners, minimum width=2.5cm, minimum height=0.6cm, below=0.6cm of classifier] (selection) {Best Artwork};
+\draw[->, thick] (title)--(features); \draw[->, thick] (features)--(classifier);
+\draw[->, thick] (user)--(classifier); \draw[->, thick] (classifier)--(selection);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.15cm}
+\textbf{Examples}:
+\begin{itemize}
+    \item User who likes action $\to$ poster with explosions
+    \item User who likes romance $\to$ poster with couple
+    \item User who likes comedy $\to$ poster with funny scene
+\end{itemize}
+
+\textbf{Result}: +0.3\% engagement, significant for Netflix's scale.
+
+\textbf{Method}: Scene detection $\to$ emotion classifier $\to$ user preference match $\to$ select best frame.
+\end{frame}
+
+%=================================================================
+\begin{frame}{Netflix: Row-Level Personalization}
+\small
+\textbf{Dynamic row generation} --- not just what videos, but which \textbf{genres}:
+
+\begin{align*}
+P(\text{row}_r \mid u) &\propto \text{engagement}_u(\text{genres in } r) \\
+\text{RowScore}(r, u) &= \text{affinity}_u(r) + \text{diversity\_bonus}(u, r)
+\end{align*}
+
+\vspace{0.15cm}
+\textbf{Row types}:
+\begin{table}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Row} & \textbf{Algorithm} \\
+\midrule
+Trending Now & Popularity + geo-relevance \\
+Because You Watched X | Item-based CF \\
+Top Picks For You & Two-tower DNN retrieval \\
+New Releases & Freshness-boosted ranking \\
+Continue Watching & Session continuity \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.15cm}
+\textbf{Gallery view}: Items within each row are independently ranked. Each row can have a different ranking algorithm.
+
+\textbf{Global constraint}: No two consecutive rows should look too similar (genre diversity).
+\end{frame}
+
+%=================================================================
+\section{Algorithmic Approaches}
+
+\begin{frame}{Content-Based Recommendation for Media}
+\small
+\textbf{TF-IDF for text metadata}:
+$\displaystyle \; \text{tf-idf}(t,d) = \frac{n_{t,d}}{\sum_{t'}n_{t',d}} \times \log\!\left(\frac{N}{\text{df}_t}\right)+1$
+
+\textbf{User profile (centroid)}:
+$\displaystyle \; \mathbf{p}_u = \frac{1}{|I_u^+|}\sum_{i\in I_u^+} \mathbf{v}_i^{\text{tfidf}}$
+
+\vspace{0.15cm}
+\textbf{Audio feature similarity} (Spotify):
+$\displaystyle \; \text{sim}_{\text{audio}}(i,j) = \frac{\mathbf{a}_i \cdot \mathbf{a}_j}{\|\mathbf{a}_i\|\|\mathbf{a}_j\|}$
+
+\vspace{0.15cm}
+\textbf{Performance comparison}:
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Method} & \textbf{Recall@10} & \textbf{NDCG@10} \\
+\midrule
+TF-IDF + Cosine & 0.38 & 0.34 \\
+Audio Features (CNN) & 0.55 & 0.48 \\
+Word2Vec Avg (lyrics) & 0.47 & 0.42 \\
+Multi-modal Fusion & \textbf{0.68} & \textbf{0.61} \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Collaborative Filtering for Media}
+\small
+\textbf{Matrix Factorization (implicit)}:
+\begin{align*}
+\hat{r}_{u,i} &= \mu + b_u + b_i + \mathbf{p}_u \cdot \mathbf{q}_i^T \\
+\text{WALS: } \min &\sum_{u,i} w_{ui}(p_{ui} - \mathbf{p}_u\mathbf{q}_i^T)^2 + \lambda(\|\mathbf{P}\|^2 + \|\mathbf{Q}\|^2)
+\end{align*}
+
+\vspace{0.15cm}
+\textbf{Item-based CF (for "Fans also bought")}:
+\begin{equation*}
+s_{i,j} = \frac{|U_i \cap U_j|}{|U_i \cup U_j|} \quad\text{(Jaccard on listeners/viewers)}
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Session-based CF (next-item prediction)}:
+\begin{equation*}
+P(i_{t+1} \mid i_t) = \text{softmax}(\mathbf{W} \cdot \text{avg}(\mathbf{e}_{i_1}, \ldots, \mathbf{e}_{i_t}))
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Sequential pattern mining}:
+\begin{align*}
+\text{Transition matrix: } & M_{i,j} = \frac{\text{count}(i \to j)}{\text{count}(i \to \cdot)} \\
+\text{Session score: } & \text{score}(i_{t+1}) = \sum_{k=1}^t \alpha^{t-k} M_{i_k, i_{t+1}}
+\end{align*}
+$\alpha$ = temporal decay (recent items weighted more).
+\end{frame}
+
+%=================================================================
+\begin{frame}{Knowledge-Based Constraints in Media}
+\small
+\textbf{Hard constraints}:
+\begin{align*}
+\text{explicit\_block}(u, i) &\Rightarrow \text{exclude } \forall \text{ artists/genre} \\
+\text{maturity\_rating}(i) &\leq \text{max\_rating}(u) \\
+\text{geo\_availability}(i) &= \text{true} \quad\text{(licensing)}
+\end{align*}
+
+\vspace{0.15cm}
+\textbf{Utility-based scoring}:
+\begin{equation*}
+U(u,i) = w_1 u_{\text{genre}} + w_2 u_{\text{mood}} + w_3 u_{\text{duration}} + w_4 u_{\text{popularity}}
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Playlist continuation (Spotify)}:
+\begin{equation*}
+\text{score}(\text{track}_t \mid \text{playlist}) = \lambda_{\text{CF}} \cos(\mathbf{e}_t, \bar{\mathbf{e}}_{\text{playlist}}) + \lambda_{\text{CB}} \text{sim}_{\text{audio}}(t, \text{playlist\_avg})
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Hybrid score (production)}:
+\begin{equation*}
+\text{Final} = \alpha_{\text{CB}}\,\text{score}_{\text{CB}} + \beta_{\text{CF}}\,\text{score}_{\text{CF}} + \gamma_{\text{KB}}\,\text{score}_{\text{KB}}
+\end{equation*}
+Weights tuned via Bayesian optimization per user segment.
+\end{frame}
+
+%=================================================================
+\section{The Skip \& Engagement Problem}
+
+\begin{frame}{Why Users Skip — The Core Challenge}
+\small
+\textbf{Skip behavior}: The primary negative signal in media RS.
+
+\begin{columns}[T]
+\column{0.48\textwidth}
+\textbf{Skip patterns by platform}:
+\begin{itemize}
+    \item \textbf{Spotify}: $\sim$30\% of tracks skipped within 10s
+    \item \textbf{YouTube}: $\sim$40\% of videos abandoned within 30s
+    \item \textbf{Netflix}: $\sim$20\% of titles abandoned within 5min
+\end{itemize}
+
+\column{0.48\textwidth}
+\textbf{Why users skip}:
+\begin{itemize}
+    \item Wrong genre/mood
+    \item Already heard/seen
+    \item Too long/short
+    \item Poor recommendation quality
+    \item Context mismatch (time, device, company)
+\end{itemize}
+\end{columns}
+
+\vspace{0.15cm}
+\textbf{Modeling skips as feedback}:
+\begin{equation*}
+\text{Satisfaction}_{ui} = \begin{cases}
+1 & \text{if play } > 70\% \text{ duration} \\
+0 & \text{if skip } < 30\% \text{ duration} \\
+\text{partial} & \text{otherwise}
+\end{cases}
+\end{equation*}
+
+\textbf{Key insight}: A skip is not just "no" --- it's "wrong context." Same user may not skip the same song at a different time.
+\end{frame}
+
+%=================================================================
+\begin{frame}{Modeling the Skip Signal}
+\small
+\textbf{Skip prediction as auxiliary task}:
+\begin{equation*}
+P(\text{skip} \mid u, i, \text{ctx}) = \sigma(\mathbf{w}^T \cdot \phi_{\text{skip}}(u,i,\text{ctx}))
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Multi-task learning architecture}:
+\begin{equation*}
+\mathcal{L} = \mathcal{L}_{\text{play}} + \lambda_{\text{skip}} \mathcal{L}_{\text{skip}} + \lambda_{\text{dwell}} \mathcal{L}_{\text{dwell}}
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Skip-aware ranking}:
+\begin{equation*}
+\text{RankScore}(u,i) = \text{Score}_{\text{base}}(u,i) - \beta \cdot P(\text{skip} \mid u,i)
+\end{equation*}
+$\beta$ controls how aggressively to demote likely-to-be-skipped items.
+
+\vspace{0.15cm}
+\textbf{Contextual skip modeling}:
+\begin{table}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Context} & \textbf{Skip Probability Change} \\
+\midrule
+Morning commute & +15\% (distracted listening) \\
+Late night & -10\% (focused) \\
+Party / social & +25\% (background) \\
+Gym / workout & -20\% (high energy needed) \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Dwell Time as a Quality Signal}
+\small
+\textbf{Dwell time} = how long the user engaged before skipping. This is the most granular feedback signal.
+
+\textbf{Weighted by dwell}:
+\begin{equation*}
+\text{weight}_{ui} = \frac{\min(\text{dwell}_{ui}, \text{cap})}{\text{duration}_i} \in [0, 1]
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Censored regression model} (YouTube):
+\begin{equation*}
+P(\text{watch\_time} > t \mid u,i) = \exp\!\left(-\frac{t}{\mu(u,i)}\right)
+\end{equation*}
+where $\mu(u,i) = \exp(\mathbf{w}^T \mathbf{x})$ is the expected watch time.
+
+\vspace{0.15cm}
+\textbf{Skip timing patterns}:
+\begin{center}
+\begin{tikzpicture}[scale=0.6]
+\draw[->, thick] (0,0) -- (6,0) node[right] {Time};
+\draw[->, thick] (0,0) -- (0,4) node[above] {Skip density};
+\draw[blue, thick] plot[smooth] coordinates {(0,0.5) (1,2.5) (2,1.5) (3,1) (4,0.5) (5,0.2)};
+\draw[dashed, red] (0.5,0) -- (0.5,3);
+\node[below] at (0.5,-0.2) {10s};
+\node at (4.5, 3) {Late skip = mismatch};
+\node at (1, 3.2) {Early skip = disinterest};
+\end{tikzpicture}
+\end{center}
+
+Early skips ($<10s$): user didn't like the recommendation at all.
+Late skips ($>60\%$): user liked it initially but lost interest.
+\end{frame}
+
+%=================================================================
+\section{Session-Based \& Sequential Recommendation}
+
+\begin{frame}{Session-Based Recommendation}
+\small
+\textbf{The session problem}: Users don't have persistent identities (especially YouTube). Only the current session matters.
+
+\textbf{GRU4Rec} (Session-based RNN):
+\begin{equation*}
+\mathbf{h}_t = \text{GRU}(\mathbf{h}_{t-1}, \mathbf{e}_{i_t}), \quad P(i_{t+1}) = \text{softmax}(\mathbf{W} \cdot \mathbf{h}_t)
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Session features}:
+\begin{align*}
+\text{Session length:} &\quad \text{num\_clips}, \text{total\_time} \\
+\text{Session diversity:} &\quad \text{unique\_genres} / \text{total\_clips} \\
+\text{Session trajectory:} &\quad \text{genre transitions} \\
+\text{Abandonment:} &\quad \text{last\_action}, \text{time\_since\_last}
+\end{align*}
+
+\vspace{0.15cm}
+\textbf{Next-item prediction accuracy}:
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Method} & \textbf{Recall@20} & \textbf{MRR} \\
+\midrule
+POP (most popular) & 0.12 & 0.02 \\
+Item-KNN & 0.26 & 0.08 \\
+BPR-MF & 0.31 & 0.10 \\
+GRU4Rec & \textbf{0.45} & \textbf{0.16} \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Sequential Pattern Mining in Media}
+\small
+\textbf{Character-level RNN for playlist continuation} (Spotify):
+
+\begin{equation*}
+P(\text{track}_{t+1} \mid \text{context}_{<t}) = \text{softmax}(\mathbf{W} \cdot \text{LSTM}(\text{embeddings}_{<t}))
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Types of sequential patterns}:
+\begin{enumerate}
+    \item \textbf{Artist affinity}: "After listening to Artist A, users often play Artist B"
+    \item \textbf{Mood transition}: "High energy $\to$ medium energy $\to$ cool down"
+    \item \textbf{Genre flow}: "Hip hop $\to$ R\&B $\to$ Soul" (smooth genre transitions)
+    \item \textbf{Session arc}: "Exploration $\to$ peak $\to$ wind-down"
+\end{enumerate}
+
+\vspace{0.15cm}
+\textbf{Transformer-based session model} (BERT4Rec):
+\begin{equation*}
+P(i_t \mid i_{<t}, i_{>t}) = \text{softmax}(\mathbf{W} \cdot \text{BERT}(\mathbf{E}_{i_1}, \ldots, \mathbf{E}_{i_T})_t)
+\end{equation*}
+Bidirectional context: the next recommendation depends on BOTH past and future items in the session.
+
+\vspace{0.15cm}
+\textbf{Why it matters}: Playlist listening is sequential by nature --- the next track should fit the current vibe.
+\end{frame}
+
+%=================================================================
+\section{Evaluation}
+
+\begin{frame}{Offline Evaluation Metrics for Media}
+\small
+\begin{columns}[T]
+\column{0.48\textwidth}
+\textbf{Ranking Metrics}
+\begin{align*}
+\text{Recall@k} &= \frac{|\text{relevant} \cap \text{top-k}|}{|\text{relevant}|} \\
+\text{HR@k (Hit Rate)} &= \mathbb{I}[\text{relevant} \cap \text{top-k} \ne \emptyset] \\
+\text{NDCG@k} &= \frac{\text{DCG@k}}{\text{IDCG@k}} \\
+\text{MRR} &= \frac{1}{|U|}\sum_u \frac{1}{\text{rank}(\text{first hit})}
+\end{align*}
+
+\column{0.48\textwidth}
+\textbf{Engagement Metrics}
+\begin{align*}
+\text{Skip Rate} &= \frac{\#\text{skips}}{\#\text{plays}} \\
+\text{Avg. Dwell} &= \frac{1}{N}\sum_i \text{watch\_time}_i \\
+\text{Session Depth} &= \text{avg items/session} \\
+\text{Repeat Rate} &= \frac{\#\text{replays}}{\#\text{recommended}}
+\end{align*}
+\end{columns}
+
+\vspace{0.15cm}
+\textbf{Relevance grading by engagement}:
+\begin{table}
+\centering
+\begin{tabular}{lc}
+\toprule
+\textbf{Action} & \textbf{Relevance} \\
+\midrule
+Full play / add to playlist & 3 \\
+Partial play ($>50\%$) & 2 \\
+Short dwell ($<10$s) & 1 \\
+Skip ($<3$s) & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Online Evaluation: A/B Testing for Media}
+\small
+\textbf{Key Metrics by Platform}:
+
+\begin{table}
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Platform} & \textbf{Primary Metric} & \textbf{Secondary} \\
+\midrule
+Spotify & Session time, skip rate & Discovery rate \\
+YouTube & Watch time, session depth & CTR, satisfaction \\
+Netflix & Retention (30-day) & Hours streamed \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.15cm}
+\textbf{A/B Testing Challenges}:
+\begin{table}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Challenge} & \textbf{Mitigation} \\
+\midrule
+Network effects (social) & Cluster-based randomization \\
+Carryover effects (today affects tomorrow) & Time-segmented holdout \\
+Primacy effect (new UI shocks users) & Gradual ramp: $1\%\to100\%$ \\
+Novelty effect (new = more clicks) | Time-windowed analysis \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.15cm}
+\textbf{Example}: YouTube's DNN ranking $\uparrow$ watch time by \textbf{+81\%} (Covington et al., 2016).
+\end{frame}
+
+%=================================================================
+\section{Fairness \& Diversity}
+
+\begin{frame}{The Filter Bubble Problem}
+\small
+\textbf{The problem}: Recommendation systems create echo chambers by only recommending content similar to what the user already consumes.
+
+\begin{columns}[T]
+\column{0.48\textwidth}
+\textbf{Symptoms}:
+\begin{itemize}
+    \item Niche interests never discovered
+    \item Political polarization (YouTube radicalization)
+    \item Musical taste stagnation
+    \item Reduced catalog coverage
+\end{itemize}
+
+\column{0.48\textwidth}
+\textbf{Metrics}:
+\begin{align*}
+\text{Catalog Coverage} &= \frac{|\text{recommended items}|}{|\text{total items}|} \\
+\text{Genre Diversity} &= 1 - \text{Gini}(\text{genre distribution}) \\
+\text{Serendipity} &= \frac{|\text{rec} \cap \text{novel}|}{|\text{rec}|}
+\end{align*}
+\end{columns}
+
+\vspace{0.15cm}
+\textbf{Diversity-accuracy tradeoff}:
+\begin{equation*}
+\text{Score}_{\text{final}}(u,i) = \text{Score}_{\text{rel}}(u,i) + \lambda \cdot \underbrace{\text{MMR}(\text{rec}_u, i)}_{\text{diversity penalty}}
+\end{equation*}
+MMR = Maximum Marginal Relevance: penalizes items too similar to already-recommended ones.
+\end{frame}
+
+%=================================================================
+\begin{frame}{Debiasing Media Recommendations}
+\small
+\textbf{Bias sources in media RS}:
+\begin{itemize}
+    \item \textbf{Popularity bias}: popular items get recommended more $\to$ get even more popular
+    \item \textbf{Position bias}: top positions get more clicks regardless of relevance
+    \item \textbf{Exposure bias}: we only observe feedback on recommended items
+    \item \textbf{Selection bias}: users self-select what they engage with
+\end{itemize}
+
+\vspace{0.15cm}
+\textbf{Popularity debiasing (Spotify)}:
+\begin{equation*}
+\text{Score}_{\text{corrected}}(u,i) = \text{Score}_{\text{raw}}(u,i) - \gamma \cdot \log(\text{popularity}_i)
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Inverse Propensity Scoring (IPS)}:
+\begin{equation*}
+\hat{R}_{\text{IPS}}(\pi) = \frac{1}{|U|}\sum_u\sum_i \frac{\mathbb{I}[\pi(u)=i] \cdot c_{ui}}{P(\text{observed}_{ui})}
+\end{equation*}
+
+\vspace{0.15cm}
+\textbf{Algorithmic fairness constraints}:
+\begin{align*}
+\text{Demographic Parity: } & P(\text{rec} \mid A) = P(\text{rec} \mid B) \\
+\text{Genre Balance: } & \text{Gini}(\text{rec}_u) \ge \tau
+\end{align*}
+\end{frame}
+
+%=================================================================
+\section{The Future}
+
+\begin{frame}{Generative AI \& The Next Frontier}
+\small
+\textbf{Matching $\to$ Creating}:
+\begin{itemize}
+    \item \textit{Current}: "Here are songs you might like"
+    \item \textit{Next-gen}: "Here's a personalized AI-generated track based on your taste"
+\end{itemize}
+
+\vspace{0.15cm}
+\textbf{Generative features}:
+\begin{enumerate}
+    \item \textbf{AI DJ} (Spotify): LLM-powered commentary between tracks
+    \item \textbf{Personalized playlists}: "Give me 30min of high-energy workout music"
+    \item \textbf{Smart shuffles}: Rearrange queue based on mood transitions
+    \item \textbf{Mood detection}: Real-time facial expression $\to$ music matching
+\end{enumerate}
+
+\vspace{0.15cm}
+\textbf{Architecture}: Retrieval-Augmented Generation
+\begin{align*}
+\text{Retrieve: } &\mathcal{D}_{\text{rel}} = \text{Top-K}(\text{EBR}(q,\mathcal{I})) \\
+\text{Generate: } &\text{Playlist} = \text{LLM}(q \oplus \mathcal{D}_{\text{rel}} \oplus \text{taste\_profile})
+\end{align*}
+
+\vspace{0.15cm}
+\textbf{Challenges}:
+\begin{itemize}
+    \item Real-time generation latency
+    \item Licensing and copyright
+    \item Evaluating generated content quality
+\end{itemize}
+\end{frame}
+
+%=================================================================
+\begin{frame}{Summary: Spotify vs YouTube vs Netflix}
+\small
+\begin{table}
+\centering
+\begin{tabular}{lp{3.5cm}p{3.5cm}p{3.5cm}}
+\toprule
+\textbf{Dimension} & \textbf{Spotify} & \textbf{YouTube} & \textbf{Netflix} \\
+\midrule
+Paradigm & Discovery + mood & Session-based & Homepage + rows \\
+Retrieval & CF + NLP + Audio & Two-tower DNN & Two-tower + trends \\
+Ranking & Ensemble blending & Wide \& Deep DNN & Contextual DNN \\
+Personalization & Long-term taste profile & Short-term session & Account-level + profiles \\
+Unique & Audio CNNs, Discover Weekly & Watch-time optimization & Artwork personalization \\
+Skip signal & Early/late skip model & Dwell-time regression & Abandonment model \\
+Cold start & Audio features, onboarding & Popularity, query & Genre onboarding, popular \\
+Diversity & Playlist diversity MMR & Explore-exploit & Row diversity \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.15cm}
+\centering
+\textbf{Bottom line}: All share the two-stage retrieve$\to$rank paradigm, but differ in \textbf{signal sources}, \textbf{optimization targets}, and \textbf{personalization horizon}.
+\end{frame}
+
+%=================================================================
+\begin{frame}
+\centering
+\Huge Questions \& Discussion
+
+\vspace{0.5cm}
+\normalsize
+Thank you for your attention.
+\end{frame}
+
+\end{document}
