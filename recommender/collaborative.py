@@ -41,7 +41,8 @@ class CollaborativeFiltering:
     def user_based_cf(self, user_id, n_recommendations=10, k=20):
         """User-Based Collaborative Filtering.
         
-        Finds top-k most similar users via cosine similarity, then predicts
+        Finds top-k most similar users via Pearson correlation (centers each user's
+        ratings by their mean to correct for rating scale bias), then predicts
         ratings for unseen items as a similarity-weighted average of neighbors' ratings.
         """
         u_idx = self._get_user_index(user_id)
@@ -49,7 +50,7 @@ class CollaborativeFiltering:
             return []
 
         matrix_filled = np.nan_to_num(self.user_item_matrix, nan=self.global_mean)
-        sim_matrix = cosine_similarity(matrix_filled)
+        sim_matrix = pearson_similarity(matrix_filled)
         user_sim = sim_matrix[u_idx]
         user_sim[u_idx] = 0
 

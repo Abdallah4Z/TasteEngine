@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from utils.helpers import load_data
+from utils.similarity import jaccard_similarity
 
 
 class ContentBasedRecommender:
@@ -86,6 +87,7 @@ class ContentBasedRecommender:
                 score += 30
             if budget_min <= product["price"] <= budget_max:
                 score += 20
+            score += round(10 * jaccard_similarity({product["category"]}, preferred_cats))
             scores.append((int(product["product_id"]), score))
 
         scores.sort(key=lambda x: x[1], reverse=True)
